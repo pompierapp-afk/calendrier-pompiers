@@ -3,11 +3,54 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Calendrier Pompiers - Gestion Complète</title>
+  <title>Calendrier Pompiers - Gestion des Tournées</title>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  
+
+  <!-- FIREBASE -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA-xJ_2fDZLttgvYytfVGzO2pRZ6o-CI",
+      authDomain: "calandier-952ed.firebaseapp.com",
+      projectId: "calandier-952ed",
+      storageBucket: "calandier-952ed.firebasestorage.app",
+      messagingSenderId: "153510526774",
+      appId: "1:153510526774:web:8a4065bc00d4ddf7abbd97"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    window.db = db;
+    window.fsCollection = collection;
+    window.fsAddDoc = addDoc;
+    window.fsOnSnapshot = onSnapshot;
+    window.fsDoc = doc;
+    window.fsDeleteDoc = deleteDoc;
+
+    onSnapshot(collection(db, "equipes"), (snapshot) => {
+      equipes = [];
+      snapshot.forEach(d => equipes.push({ id: d.id, ...d.data() }));
+      if (document.getElementById('vue-equipes')?.classList.contains('active')) renderEquipes();
+    });
+
+    onSnapshot(collection(db, "tournees"), (snapshot) => {
+      tournees = [];
+      snapshot.forEach(d => tournees.push({ id: d.id, ...d.data() }));
+      if (document.getElementById('vue-tournees')?.classList.contains('active')) renderTournees();
+    });
+
+    onSnapshot(collection(db, "paiements"), (snapshot) => {
+      paiements = [];
+      snapshot.forEach(d => paiements.push({ id: d.id, ...d.data() }));
+      if (document.getElementById('vue-paiements')?.classList.contains('active')) renderPaiements();
+    });
+
+    console.log("✅ Firebase connecté !");
+  </script>
+
   <style>
     :root {
       --rouge: #D62828;
@@ -86,7 +129,7 @@
     }
 
     .badge-annee {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: 'Bebas Neue', monospace;
       font-size: 13px;
       color: var(--or);
       background: rgba(244,164,38,0.1);
@@ -169,6 +212,43 @@
 
     .card-body { padding: 20px; }
 
+    .equipe-card {
+      background: var(--gris-fonce);
+      border-radius: 12px;
+      border: 1px solid var(--gris-clair);
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 16px;
+    }
+
+    .equipe-card:hover {
+      border-color: var(--rouge);
+      transform: translateY(-2px);
+    }
+
+    .equipe-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .equipe-nom {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 16px;
+      letter-spacing: 1.5px;
+    }
+
+    .equipe-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      background: var(--gris-clair);
+      padding: 3px 8px;
+      border-radius: 4px;
+      color: var(--or);
+    }
+
     .progress-bar {
       height: 6px;
       background: var(--gris-clair);
@@ -181,58 +261,6 @@
       height: 100%;
       background: linear-gradient(90deg, var(--rouge), var(--or));
       border-radius: 3px;
-    }
-
-    .tournee-item {
-      background: var(--gris-moyen);
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 12px;
-      border: 1px solid var(--gris-clair);
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .tournee-item:hover {
-      border-color: var(--rouge);
-      transform: translateY(-2px);
-    }
-
-    .tournee-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-
-    .tournee-num {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 20px;
-      color: var(--rouge);
-      font-weight: 700;
-    }
-
-    .tournee-nom {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 16px;
-      letter-spacing: 1.5px;
-      flex: 1;
-      margin-left: 16px;
-    }
-
-    .tournee-code {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      background: var(--gris-clair);
-      padding: 4px 10px;
-      border-radius: 4px;
-      color: var(--or);
-    }
-
-    .tournee-info {
-      font-size: 12px;
-      color: var(--texte-dim);
-      margin-top: 8px;
     }
 
     .btn {
@@ -259,21 +287,6 @@
       border: 1px solid var(--gris-clair);
     }
     .btn-outline:hover { border-color: var(--rouge); color: var(--rouge); }
-
-    .flex-between {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 16px;
-    }
-
-    .section-title {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 22px;
-      letter-spacing: 2px;
-      margin-bottom: 16px;
-      color: var(--texte);
-    }
 
     .modal-overlay {
       position: fixed;
@@ -362,55 +375,41 @@
       gap: 12px;
     }
 
-    #map {
+    .table-paiements {
       width: 100%;
-      height: 500px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      border: 2px solid var(--gris-clair);
+      border-collapse: collapse;
     }
 
-    .success {
-      background: rgba(46,204,113,0.1);
-      color: var(--vert);
-      padding: 15px;
-      border-radius: 6px;
-      margin-bottom: 20px;
-      border-left: 4px solid var(--vert);
-    }
-
-    .error {
-      background: rgba(198,40,40,0.1);
-      color: #ff6b6b;
-      padding: 15px;
-      border-radius: 6px;
-      margin-bottom: 20px;
-      border-left: 4px solid #ff6b6b;
-    }
-
-    .info {
-      background: rgba(52,152,219,0.1);
-      color: var(--bleu);
-      padding: 15px;
-      border-radius: 6px;
-      margin-bottom: 20px;
-      border-left: 4px solid var(--bleu);
-    }
-
-    .map-controls {
-      background: var(--gris-moyen);
-      padding: 12px;
-      border-radius: 8px;
-      margin-bottom: 16px;
-      border: 1px solid var(--gris-clair);
-    }
-
-    .map-controls-title {
-      font-size: 12px;
+    .table-paiements th {
+      text-align: left;
+      padding: 10px 12px;
+      font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
+      letter-spacing: 1.5px;
       color: var(--texte-dim);
-      margin-bottom: 8px;
+      border-bottom: 1px solid var(--gris-clair);
+    }
+
+    .table-paiements td {
+      padding: 12px;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .flex-between {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      letter-spacing: 2px;
+      margin-bottom: 16px;
+      color: var(--texte);
     }
 
     .paiement-summary {
@@ -442,28 +441,6 @@
       margin-top: 4px;
     }
 
-    .table-paiements {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    .table-paiements th {
-      text-align: left;
-      padding: 10px 12px;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: var(--texte-dim);
-      border-bottom: 1px solid var(--gris-clair);
-    }
-
-    .table-paiements td {
-      padding: 12px;
-      font-size: 13px;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-    }
-
     .chart-container {
       position: relative;
       height: 240px;
@@ -477,7 +454,8 @@
   <div class="logo">🔥 Calendrier<span>Sales</span></div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showVue('dashboard')">Dashboard</button>
-    <button class="nav-tab" onclick="showVue('tournees')">Tournées</button>
+    <button class="nav-tab" onclick="showVue('equipes')">Équipes</button>
+    <button class="nav-tab" onclick="showVue('tournees')">Tournées & Binômes</button>
     <button class="nav-tab" onclick="showVue('paiements')">Paiements</button>
   </div>
   <div class="badge-annee">Campagne 2025</div>
@@ -488,28 +466,28 @@
   <div class="stats-grid">
     <div class="stat-card">
       <div class="stat-label">Calendriers vendus</div>
-      <div class="stat-value" id="stat-vendus">0</div>
-      <div class="stat-sub">sur X distribués</div>
+      <div class="stat-value">847</div>
+      <div class="stat-sub">sur 1 200 distribués</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Recette totale</div>
-      <div class="stat-value" id="stat-recette">0€</div>
+      <div class="stat-value">6 776€</div>
       <div class="stat-sub">Objectif : 9 600€</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Tournées actives</div>
-      <div class="stat-value" id="stat-tournees">0</div>
-      <div class="stat-sub">en cours</div>
+      <div class="stat-label">Équipes actives</div>
+      <div class="stat-value">6</div>
+      <div class="stat-sub">sur 6 équipes</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Adresses visitées</div>
-      <div class="stat-value" id="stat-adresses">0</div>
-      <div class="stat-sub">sur total</div>
+      <div class="stat-value">312</div>
+      <div class="stat-sub">sur 480 prévues</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Taux complétion</div>
-      <div class="stat-value" id="stat-taux">0%</div>
-      <div class="stat-sub">à accomplir</div>
+      <div class="stat-label">Restants en stock</div>
+      <div class="stat-value">353</div>
+      <div class="stat-sub">à distribuer</div>
     </div>
   </div>
 
@@ -521,26 +499,36 @@
       <div style="margin-bottom:16px">
         <div style="display:flex;justify-content:space-between;margin-bottom:6px">
           <span style="font-size:12px;color:var(--texte-dim)">💵 Espèces</span>
-          <span style="font-family:'JetBrains Mono',monospace;color:var(--vert);font-size:13px" id="esp-total">0€</span>
+          <span style="font-family:'JetBrains Mono',monospace;color:var(--vert);font-size:13px">3 240€</span>
         </div>
-        <div class="progress-bar"><div class="progress-fill" id="esp-bar" style="width:0%;background:var(--vert)"></div></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:47%;background:var(--vert)"></div></div>
       </div>
       <div style="margin-bottom:16px">
         <div style="display:flex;justify-content:space-between;margin-bottom:6px">
           <span style="font-size:12px;color:var(--texte-dim)">🏦 Chèque</span>
-          <span style="font-family:'JetBrains Mono',monospace;color:var(--bleu);font-size:13px" id="che-total">0€</span>
+          <span style="font-family:'JetBrains Mono',monospace;color:var(--bleu);font-size:13px">2 536€</span>
         </div>
-        <div class="progress-bar"><div class="progress-fill" id="che-bar" style="width:0%;background:var(--bleu)"></div></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:37%;background:var(--bleu)"></div></div>
       </div>
       <div style="margin-bottom:24px">
         <div style="display:flex;justify-content:space-between;margin-bottom:6px">
           <span style="font-size:12px;color:var(--texte-dim)">📲 Virement</span>
-          <span style="font-family:'JetBrains Mono',monospace;color:var(--or);font-size:13px" id="vir-total">0€</span>
+          <span style="font-family:'JetBrains Mono',monospace;color:var(--or);font-size:13px">1 000€</span>
         </div>
-        <div class="progress-bar"><div class="progress-fill" id="vir-bar" style="width:0%;background:var(--or)"></div></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:16%;background:var(--or)"></div></div>
       </div>
     </div>
   </div>
+</div>
+
+<!-- VUE ÉQUIPES -->
+<div class="vue" id="vue-equipes">
+  <div class="flex-between">
+    <div class="section-title">🧑‍🚒 Gestion des Équipes</div>
+    <button class="btn btn-rouge" onclick="openModal('modal-equipe')">+ Nouvelle équipe</button>
+  </div>
+
+  <div id="equipes-container"></div>
 </div>
 
 <!-- VUE TOURNÉES -->
@@ -550,16 +538,7 @@
     <button class="btn btn-rouge" onclick="openModal('modal-tournee')">+ Créer une tournée</button>
   </div>
 
-  <div id="tournees-container" class="card">
-    <div class="card-header">
-      <div class="card-title">Liste des tournées</div>
-    </div>
-    <div class="card-body">
-      <div id="tournees-list" style="color: var(--texte-dim); text-align: center; padding: 40px 0;">
-        Aucune tournée créée. Cliquez sur "Créer une tournée" pour commencer.
-      </div>
-    </div>
-  </div>
+  <div id="tournees-container"></div>
 </div>
 
 <!-- VUE PAIEMENTS -->
@@ -569,17 +548,17 @@
   <div class="paiement-summary">
     <div class="pay-card">
       <div class="pay-icon">💵</div>
-      <div class="pay-amount" id="pay-esp">0€</div>
+      <div class="pay-amount">3 240€</div>
       <div class="pay-label">Espèces</div>
     </div>
     <div class="pay-card">
       <div class="pay-icon">🏦</div>
-      <div class="pay-amount" id="pay-che">0€</div>
+      <div class="pay-amount">2 536€</div>
       <div class="pay-label">Chèques</div>
     </div>
     <div class="pay-card">
       <div class="pay-icon">📲</div>
-      <div class="pay-amount" id="pay-vir">0€</div>
+      <div class="pay-amount">1 000€</div>
       <div class="pay-label">Virements</div>
     </div>
   </div>
@@ -592,11 +571,12 @@
       <table class="table-paiements">
         <thead>
           <tr>
-            <th>Tournée</th>
-            <th>Chef</th>
-            <th>Binôme</th>
-            <th>Calendriers</th>
+            <th>Heure</th>
+            <th>Équipe</th>
+            <th>Adresse</th>
+            <th>Qté</th>
             <th>Montant</th>
+            <th>Mode</th>
           </tr>
         </thead>
         <tbody id="paiements-table"></tbody>
@@ -605,7 +585,46 @@
   </div>
 </div>
 
-<!-- MODAL CRÉER TOURNÉE -->
+<!-- VUE BINÔME -->
+<div class="vue" id="vue-binome">
+  <div class="section-title">📱 Vue Binôme</div>
+  <div class="card">
+    <div class="card-body">
+      <p style="color: var(--texte-dim);">Interface binôme - À développer dans l'étape 2 avec la carte intégrée.</p>
+    </div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="modal-equipe">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">🧑‍🚒 Nouvelle Équipe</div>
+      <button class="modal-close" onclick="closeModal('modal-equipe')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Nom de l'équipe</label>
+        <input class="form-input" type="text" placeholder="Ex: Équipe Charlie" id="eq-nom">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Pompier 1</label>
+          <input class="form-input" type="text" placeholder="Prénom Nom" id="eq-p1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Pompier 2</label>
+          <input class="form-input" type="text" placeholder="Prénom Nom" id="eq-p2">
+        </div>
+      </div>
+      <div style="text-align:right;margin-top:8px">
+        <button class="btn btn-outline" style="margin-right:8px" onclick="closeModal('modal-equipe')">Annuler</button>
+        <button class="btn btn-rouge" onclick="ajouterEquipe()">Créer l'équipe</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-tournee">
   <div class="modal">
     <div class="modal-header">
@@ -613,364 +632,133 @@
       <button class="modal-close" onclick="closeModal('modal-tournee')">✕</button>
     </div>
     <div class="modal-body">
-      <div id="form-step-1">
-        <div class="form-group">
-          <label class="form-label">Numéro de la tournée</label>
-          <input class="form-input" type="number" placeholder="Ex: 1" id="t-numero" min="1">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Chef d'équipe (prénom)</label>
-          <input class="form-input" type="text" placeholder="Ex: Martin" id="t-chef">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Binôme (prénom)</label>
-          <input class="form-input" type="text" placeholder="Ex: Julie" id="t-binome">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Nombre de calendriers à distribuer</label>
-          <input class="form-input" type="number" placeholder="Ex: 50" id="t-calendriers" min="1">
-        </div>
-        <div style="text-align:right;margin-top:8px">
-          <button class="btn btn-outline" style="margin-right:8px" onclick="closeModal('modal-tournee')">Annuler</button>
-          <button class="btn btn-rouge" onclick="validerFormulaireTournee()">Suivant →</button>
-        </div>
+      <div class="form-group">
+        <label class="form-label">Équipe assignée</label>
+        <select class="form-input" id="t-equipe">
+          <option>Équipe Alpha</option>
+          <option>Équipe Bravo</option>
+        </select>
       </div>
-
-      <div id="form-step-2" style="display:none">
-        <div class="info">
-          📍 Dessinez un polygone sur la carte pour délimiter votre zone. Cliquez sur 3 points minimum.
-        </div>
-        
-        <div id="map"></div>
-
-        <div class="map-controls">
-          <div class="map-controls-title">Étape de dessin</div>
-          <button class="btn btn-rouge" id="btn-terminer" onclick="terminerPolygone()" disabled style="width:100%;margin-bottom:8px">✓ Terminer le polygone</button>
-          <button class="btn btn-outline" id="btn-charger" onclick="chargerAdresses()" disabled style="width:100%">⚡ Charger les adresses</button>
-        </div>
-
-        <div id="status-map" style="margin-bottom:16px"></div>
-
-        <div style="text-align:right;margin-top:8px">
-          <button class="btn btn-outline" style="margin-right:8px" onclick="retourFormulaire()">← Précédent</button>
-          <button class="btn btn-rouge" id="btn-finaliser" onclick="finalisertournee()" disabled>Créer la tournée</button>
-        </div>
+      <div class="form-group">
+        <label class="form-label">Nom de la tournée</label>
+        <input class="form-input" type="text" placeholder="Ex: Quartier Nord" id="t-nom">
+      </div>
+      <div style="text-align:right;margin-top:8px">
+        <button class="btn btn-outline" style="margin-right:8px" onclick="closeModal('modal-tournee')">Annuler</button>
+        <button class="btn btn-rouge" onclick="creerTournee()">Créer la tournée</button>
       </div>
     </div>
   </div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <script>
+  // Les données sont maintenant chargées depuis Firebase en temps réel (voir <head>)
+  let equipes = [];
   let tournees = [];
-  let map;
-  let pointsPolygone = [];
-  let isDrawing = false;
-  let adresses = [];
-  let currentTourneeData = {};
+  let paiements = [];
 
   function showVue(nom) {
     document.querySelectorAll('.vue').forEach(v => v.classList.remove('active'));
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.getElementById('vue-'+nom).classList.add('active');
     event.currentTarget.classList.add('active');
+
+    if(nom==='equipes') renderEquipes();
     if(nom==='tournees') renderTournees();
-    if(nom==='paiements') updatePaiements();
-    if(nom==='dashboard') updateDashboard();
+    if(nom==='paiements') renderPaiements();
   }
 
   function openModal(id) { document.getElementById(id).classList.add('open'); }
-  function closeModal(id) { 
-    document.getElementById(id).classList.remove('open');
-    resetForm();
-  }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
-  function resetForm() {
-    document.getElementById('form-step-1').style.display='block';
-    document.getElementById('form-step-2').style.display='none';
-    document.getElementById('t-numero').value='';
-    document.getElementById('t-chef').value='';
-    document.getElementById('t-binome').value='';
-    document.getElementById('t-calendriers').value='';
-    pointsPolygone = [];
-    adresses = [];
-    isDrawing = false;
-  }
-
-  function validerFormulaireTournee() {
-    const numero = document.getElementById('t-numero').value;
-    const chef = document.getElementById('t-chef').value;
-    const binome = document.getElementById('t-binome').value;
-    const calendriers = document.getElementById('t-calendriers').value;
-
-    if(!numero || !chef || !binome || !calendriers) {
-      alert('❌ Remplissez tous les champs !');
+  function renderEquipes() {
+    const c = document.getElementById('equipes-container');
+    if (equipes.length === 0) {
+      c.innerHTML = '<div style="color:var(--texte-dim);font-size:13px;padding:20px">Aucune équipe. Créez votre première équipe !</div>';
       return;
     }
-
-    currentTourneeData = { numero, chef, binome, calendriers, code: genererCode() };
-    
-    document.getElementById('form-step-1').style.display='none';
-    document.getElementById('form-step-2').style.display='block';
-    
-    setTimeout(() => initMap(), 100);
-  }
-
-  function genererCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let code = '';
-    for(let i=0;i<6;i++) code += chars[Math.floor(Math.random()*chars.length)];
-    return code;
-  }
-
-  function initMap() {
-    if(map) map.remove();
-    map = L.map('map').setView([45.25, 4.75], 13);
-    
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap',
-      maxZoom: 19
-    }).addTo(map);
-    
-    map.on('click', onMapClick);
-  }
-
-  function onMapClick(e) {
-    if(!isDrawing && pointsPolygone.length===0) {
-      isDrawing = true;
-      pointsPolygone = [];
-      updateStatusMap('info', '✏️ Dessin en cours...');
-    }
-    
-    if(isDrawing) {
-      const latlng = e.latlng;
-      pointsPolygone.push(latlng);
-      
-      L.circleMarker(latlng, {
-        radius: 6,
-        fillColor: '#D62828',
-        color: '#fff',
-        weight: 2,
-        opacity: 1,
-        fillOpacity: 0.8
-      }).addTo(map);
-      
-      if(pointsPolygone.length >= 3) {
-        document.getElementById('btn-terminer').disabled = false;
-      }
-      
-      updateStatusMap('info', `📍 ${pointsPolygone.length} point(s) ajouté(s). Minimum 3 points requis.`);
-    }
-  }
-
-  function terminerPolygone() {
-    if(pointsPolygone.length < 3) {
-      updateStatusMap('error', '❌ Au minimum 3 points pour créer un polygone !');
-      return;
-    }
-    
-    isDrawing = false;
-    
-    L.polygon(pointsPolygone, {
-      color: '#D62828',
-      weight: 2,
-      opacity: 0.8,
-      fill: true,
-      fillColor: '#D62828',
-      fillOpacity: 0.1
-    }).addTo(map);
-    
-    document.getElementById('btn-terminer').disabled = true;
-    document.getElementById('btn-charger').disabled = false;
-    
-    updateStatusMap('success', `✅ Polygone finalisé ! ${pointsPolygone.length} points.`);
-  }
-
-  function chargerAdresses() {
-    if(pointsPolygone.length < 3) {
-      updateStatusMap('error', '❌ Veuillez d\'abord tracer un polygone !');
-      return;
-    }
-    
-    updateStatusMap('info', '⏳ Chargement des adresses via Overpass...');
-    
-    const bbox = calculerBbox();
-    const overpassUrl = `https://overpass-api.de/api/interpreter?data=[bbox:${bbox}];(node["addr:housenumber"]["addr:street"];way["addr:housenumber"]["addr:street"];);out geom;`;
-    
-    fetch(overpassUrl)
-      .then(res => res.text())
-      .then(data => {
-        parseOverpassData(data);
-        updateStatusMap('success', `✅ ${adresses.length} adresses chargées !`);
-        document.getElementById('btn-finaliser').disabled = false;
-      })
-      .catch(err => {
-        console.error(err);
-        updateStatusMap('error', '❌ Erreur lors du chargement.');
-      });
-  }
-
-  function calculerBbox() {
-    let minLat=90, maxLat=-90, minLon=180, maxLon=-180;
-    pointsPolygone.forEach(p => {
-      minLat = Math.min(minLat, p.lat);
-      maxLat = Math.max(maxLat, p.lat);
-      minLon = Math.min(minLon, p.lng);
-      maxLon = Math.max(maxLon, p.lng);
-    });
-    return `${minLat},${minLon},${maxLat},${maxLon}`;
-  }
-
-  function parseOverpassData(data) {
-    adresses = [];
-    try {
-      const parser = new DOMParser();
-      const xml = parser.parseFromString(data, 'text/xml');
-      const nodes = xml.querySelectorAll('node');
-      
-      nodes.forEach((node, i) => {
-        const lat = parseFloat(node.getAttribute('lat'));
-        const lon = parseFloat(node.getAttribute('lon'));
-        
-        if(pointDansPolygone([lat, lon])) {
-          const num = node.querySelector('tag[k="addr:housenumber"]')?.getAttribute('v') || '?';
-          const street = node.querySelector('tag[k="addr:street"]')?.getAttribute('v') || 'Rue inconnue';
-          const city = node.querySelector('tag[k="addr:city"]')?.getAttribute('v') || '';
-          const postcode = node.querySelector('tag[k="addr:postcode"]')?.getAttribute('v') || '';
-          
-          adresses.push({ numero: num, rue: street, ville: city, codepostal: postcode, lat, lon });
-          
-          L.circleMarker([lat, lon], {
-            radius: 5,
-            fillColor: '#2ECC71',
-            color: '#fff',
-            weight: 1,
-            opacity: 1,
-            fillOpacity: 0.8
-          }).addTo(map).bindPopup(`${num} ${street}`);
-        }
-      });
-    } catch(e) { console.error(e); }
-  }
-
-  function pointDansPolygone(point) {
-    let inside = false;
-    for(let i=0, j=pointsPolygone.length-1; i<pointsPolygone.length; j=i++) {
-      const xi = pointsPolygone[i].lat, yi = pointsPolygone[i].lng;
-      const xj = pointsPolygone[j].lat, yj = pointsPolygone[j].lng;
-      const intersect = ((yi > point[1]) !== (yj > point[1])) && (point[0] < (xj-xi)*(point[1]-yi)/(yj-yi)+xi);
-      if(intersect) inside = !inside;
-    }
-    return inside;
-  }
-
-  function updateStatusMap(type, message) {
-    const el = document.getElementById('status-map');
-    if(!message) { el.innerHTML=''; return; }
-    const className = type==='error' ? 'error' : type==='success' ? 'success' : 'info';
-    el.innerHTML = `<div class="${className}">${message}</div>`;
-  }
-
-  function retourFormulaire() {
-    document.getElementById('form-step-1').style.display='block';
-    document.getElementById('form-step-2').style.display='none';
-    if(map) map.remove();
-    pointsPolygone = [];
-    adresses = [];
-    isDrawing = false;
-  }
-
-  function finalisertournee() {
-    const montant = currentTourneeData.calendriers * 8;
-    const nom = `${currentTourneeData.chef} & ${currentTourneeData.binome}`;
-    tournees.push({
-      id: tournees.length + 1,
-      numero: currentTourneeData.numero,
-      chef: currentTourneeData.chef,
-      binome: currentTourneeData.binome,
-      nom: nom,
-      code: currentTourneeData.code,
-      calendriers: currentTourneeData.calendriers,
-      adresses: adresses,
-      nbAdresses: adresses.length,
-      montant: montant
-    });
-    
-    closeModal('modal-tournee');
-    renderTournees();
-    updateDashboard();
-    updatePaiements();
-    alert(`✅ Tournée créée !\n\nCode d'accès: ${currentTourneeData.code}\n\nÀ envoyer à ${currentTourneeData.chef} et ${currentTourneeData.binome}`);
-  }
-
-  function renderTournees() {
-    const container = document.getElementById('tournees-list');
-    if(tournees.length === 0) {
-      container.innerHTML = '<div style="color: var(--texte-dim); text-align: center; padding: 40px 0;">Aucune tournée créée. Cliquez sur "Créer une tournée" pour commencer.</div>';
-      return;
-    }
-    
-    container.innerHTML = tournees.map(t => `
-      <div class="tournee-item">
-        <div class="tournee-header">
-          <div class="tournee-num">#${t.numero}</div>
-          <div class="tournee-nom">${t.chef} & ${t.binome}</div>
-          <div class="tournee-code">${t.code}</div>
+    c.innerHTML = equipes.map(e => `
+      <div class="equipe-card">
+        <div class="equipe-header">
+          <div class="equipe-nom">🔥 ${e.nom}</div>
+          <button onclick="supprimerEquipe('${e.id}')" style="background:none;border:none;color:var(--texte-dim);cursor:pointer;font-size:16px">🗑</button>
         </div>
-        <div class="tournee-info">
-          📅 ${t.calendriers} calendriers | 📍 ${t.nbAdresses} adresses | 💰 ${t.montant}€
-        </div>
+        <div style="font-size:12px;color:var(--texte-dim);margin-bottom:12px">${e.p1} & ${e.p2||''}</div>
       </div>
     `).join('');
   }
 
-  function updateDashboard() {
-    const totalVendus = tournees.reduce((s, t) => s + parseInt(t.calendriers || 0), 0);
-    const totalRecette = tournees.reduce((s, t) => s + parseInt(t.montant || 0), 0);
-    const totalAdresses = tournees.reduce((s, t) => s + t.nbAdresses, 0);
-    
-    document.getElementById('stat-vendus').textContent = totalVendus;
-    document.getElementById('stat-recette').textContent = totalRecette + '€';
-    document.getElementById('stat-tournees').textContent = tournees.length;
-    document.getElementById('stat-adresses').textContent = totalAdresses;
-    document.getElementById('stat-taux').textContent = totalAdresses > 0 ? Math.round((totalVendus/totalAdresses)*100) + '%' : '0%';
+  async function ajouterEquipe() {
+    const nom = document.getElementById('eq-nom').value.trim();
+    const p1 = document.getElementById('eq-p1').value.trim();
+    const p2 = document.getElementById('eq-p2').value.trim();
+    if(!nom||!p1) return alert('Remplissez au moins le nom et le pompier 1');
+    try {
+      await window.fsAddDoc(window.fsCollection(window.db, "equipes"), { nom, p1, p2 });
+      closeModal('modal-equipe');
+      document.getElementById('eq-nom').value='';
+      document.getElementById('eq-p1').value='';
+      document.getElementById('eq-p2').value='';
+    } catch(e) { alert('Erreur Firebase : ' + e.message); }
   }
 
-  function updatePaiements() {
-    const totalRecette = tournees.reduce((s, t) => s + parseInt(t.montant || 0), 0);
-    const especes = Math.round(totalRecette * 0.5);
-    const cheques = Math.round(totalRecette * 0.3);
-    const virements = totalRecette - especes - cheques;
-    
-    document.getElementById('pay-esp').textContent = especes + '€';
-    document.getElementById('pay-che').textContent = cheques + '€';
-    document.getElementById('pay-vir').textContent = virements + '€';
-    
-    document.getElementById('esp-total').textContent = especes + '€';
-    document.getElementById('che-total').textContent = cheques + '€';
-    document.getElementById('vir-total').textContent = virements + '€';
-    
-    document.getElementById('esp-bar').style.width = totalRecette > 0 ? (especes/totalRecette*100) + '%' : '0%';
-    document.getElementById('che-bar').style.width = totalRecette > 0 ? (cheques/totalRecette*100) + '%' : '0%';
-    document.getElementById('vir-bar').style.width = totalRecette > 0 ? (virements/totalRecette*100) + '%' : '0%';
-    
+  async function supprimerEquipe(id) {
+    if (!confirm('Supprimer cette équipe ?')) return;
+    try { await window.fsDeleteDoc(window.fsDoc(window.db, "equipes", id)); }
+    catch(e) { alert('Erreur : ' + e.message); }
+  }
+
+  function renderTournees() {
+    const c = document.getElementById('tournees-container');
+    if (tournees.length === 0) {
+      c.innerHTML = '<div style="color:var(--texte-dim);font-size:13px;padding:20px">Aucune tournée créée.</div>';
+      return;
+    }
+    c.innerHTML = tournees.map(t => `
+      <div class="equipe-card">
+        <div class="equipe-header">
+          <div class="equipe-nom">${t.nom}</div>
+          <div class="equipe-code">${t.code}</div>
+        </div>
+        <div style="font-size:12px;color:var(--texte-dim)">${t.equipe}</div>
+      </div>
+    `).join('');
+  }
+
+  async function creerTournee() {
+    const nom = document.getElementById('t-nom').value.trim() || 'Tournée sans nom';
+    const equipe = document.getElementById('t-equipe').value;
+    const code = 'CODE' + Math.random().toString(36).substr(2, 5).toUpperCase();
+    try {
+      await window.fsAddDoc(window.fsCollection(window.db, "tournees"), { nom, equipe, code });
+      closeModal('modal-tournee');
+      document.getElementById('t-nom').value='';
+    } catch(e) { alert('Erreur : ' + e.message); }
+  }
+
+  function renderPaiements() {
     const tbody = document.getElementById('paiements-table');
-    tbody.innerHTML = tournees.map(t => `
+    const modeLabel = { espece:'💵 Espèces', cheque:'🏦 Chèque', virement:'📲 Virement' };
+    if (paiements.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--texte-dim);padding:20px">Aucun paiement enregistré</td></tr>';
+      return;
+    }
+    tbody.innerHTML = paiements.map(p=>`
       <tr>
-        <td>#${t.numero}</td>
-        <td>${t.chef}</td>
-        <td>${t.binome}</td>
-        <td style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--or)">${t.calendriers}</td>
-        <td style="font-family:'JetBrains Mono',monospace;color:var(--vert)">${t.montant}€</td>
+        <td><span style="font-family:'JetBrains Mono',monospace;color:var(--texte-dim)">${p.heure}</span></td>
+        <td>${p.equipe}</td>
+        <td>${p.adresse}</td>
+        <td style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--or)">${p.qty}</td>
+        <td style="font-family:'JetBrains Mono',monospace;color:var(--vert)">${p.montant}€</td>
+        <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(46,204,113,0.15);color:var(--vert)">${modeLabel[p.mode]||p.mode}</span></td>
       </tr>
     `).join('');
   }
 
   window.onload = () => {
+    renderEquipes();
     renderTournees();
-    updateDashboard();
-    updatePaiements();
+    renderPaiements();
   };
 </script>
 
