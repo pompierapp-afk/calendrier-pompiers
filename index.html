@@ -3,17 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Calendrier Pompiers - Gestion des Tournées</title>
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <title>Calendrier Pompiers - Gestion Complète</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#E8392D">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="CalPompiers">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(reg => console.log('✅ Service Worker enregistré'))
+          .catch(err => console.warn('SW erreur:', err));
+      });
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <!-- FIREBASE -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, onSnapshot, collection
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyA-xJ_2fDZLttgvYytfVGzO2pRZ6o-CI",
+      apiKey: "AIzaSyA-xJ_2fDZLttgvYytfVGzO2pRZ6o-CMSA",
       authDomain: "calandier-952ed.firebaseapp.com",
       projectId: "calandier-952ed",
       storageBucket: "calandier-952ed.firebasestorage.app",
@@ -21,544 +38,1226 @@
       appId: "1:153510526774:web:8a4065bc00d4ddf7abbd97"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    window.db = db;
-    window.fsCollection = collection;
-    window.fsAddDoc = addDoc;
-    window.fsOnSnapshot = onSnapshot;
-    window.fsDoc = doc;
-    window.fsDeleteDoc = deleteDoc;
+    const fbApp = initializeApp(firebaseConfig);
+    const db    = getFirestore(fbApp);
 
-    onSnapshot(collection(db, "equipes"), (snapshot) => {
-      equipes = [];
-      snapshot.forEach(d => equipes.push({ id: d.id, ...d.data() }));
-      if (document.getElementById('vue-equipes')?.classList.contains('active')) renderEquipes();
-    });
-
-    onSnapshot(collection(db, "tournees"), (snapshot) => {
-      tournees = [];
-      snapshot.forEach(d => tournees.push({ id: d.id, ...d.data() }));
-      if (document.getElementById('vue-tournees')?.classList.contains('active')) renderTournees();
-    });
-
-    onSnapshot(collection(db, "paiements"), (snapshot) => {
-      paiements = [];
-      snapshot.forEach(d => paiements.push({ id: d.id, ...d.data() }));
-      if (document.getElementById('vue-paiements')?.classList.contains('active')) renderPaiements();
-    });
-
-    console.log("✅ Firebase connecté !");
+    window.fbDb = db;
+    window.fbDoc = doc;
+    window.fbGetDoc = getDoc;
+    window.fbSetDoc = setDoc;
+    window.fbOnSnapshot = onSnapshot;
+    window.fbCollection = collection;
+    window.fbReady = true;
+    window.dispatchEvent(new Event('firebase-ready'));
   </script>
+<style>
+  :root {
+    --rouge:        #E8392D;
+    --rouge-sombre: #C42B20;
+    --rouge-clair:  #FEF2F1;
+    --rouge-mid:    #FDDBD9;
+    --orange:       #F97316;
+    --orange-clair: #FFF7ED;
+    --or:           #F59E0B;
+    --or-clair:     #FFFBEB;
+    --fond:         #FAF9F6;
+    --fond-alt:     #F3F0EB;
+    --blanc:        #FFFFFF;
+    --gris-fonce:   #374151;
+    --gris-moyen:   #9CA3AF;
+    --gris-clair:   #E8E4DE;
+    --texte:        #1C1917;
+    --texte-dim:    #78716C;
+    --vert:         #16A34A;
+    --vert-clair:   #F0FDF4;
+    --bleu:         #2563EB;
+    --bleu-clair:   #EFF6FF;
+    --ombre:        0 2px 16px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+    --ombre-md:     0 8px 32px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06);
+    --ombre-rouge:  0 4px 20px rgba(232,57,45,0.22);
+  }
 
-  <style>
-    :root {
-      --rouge: #D62828;
-      --rouge-sombre: #9B1B1B;
-      --or: #F4A426;
-      --noir: #0E0E0E;
-      --gris-fonce: #1A1A1A;
-      --gris-moyen: #2A2A2A;
-      --gris-clair: #3A3A3A;
-      --texte: #F0EDE8;
-      --texte-dim: #888;
-      --vert: #2ECC71;
-      --bleu: #3498DB;
-    }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
 
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--fond);
+    color: var(--texte);
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-image: radial-gradient(ellipse at 80% 0%, rgba(232,57,45,0.04) 0%, transparent 60%);
+  }
 
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: var(--noir);
-      color: var(--texte);
-      min-height: 100vh;
-    }
+  /* ========== HEADER ========== */
+  .header {
+    background: var(--blanc);
+    border-bottom: 3px solid var(--rouge);
+    box-shadow: 0 2px 16px rgba(232,57,45,0.08);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 68px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
 
-    .header {
-      background: var(--gris-fonce);
-      border-bottom: 3px solid var(--rouge);
-      padding: 0 32px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      height: 64px;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 26px;
+    letter-spacing: 2px;
+    color: var(--texte);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-icon {
+    width: 38px; height: 38px;
+    background: linear-gradient(135deg, var(--rouge), var(--orange));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    box-shadow: var(--ombre-rouge);
+  }
+  .logo span { color: var(--rouge); }
 
-    .logo {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 28px;
-      letter-spacing: 3px;
-      color: var(--texte);
-    }
-    .logo span { color: var(--rouge); }
+  .nav-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--fond);
+    padding: 4px;
+    border-radius: 12px;
+  }
 
-    .nav-tabs {
-      display: flex;
-      gap: 4px;
-    }
+  .nav-tab {
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+  }
 
-    .nav-tab {
-      padding: 8px 20px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      border: none;
-      transition: all 0.2s;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-    }
+  .nav-tab.active {
+    background: var(--rouge);
+    color: white;
+    box-shadow: 0 2px 8px rgba(230,51,41,0.3);
+  }
 
-    .nav-tab.active {
-      background: var(--rouge);
-      color: white;
-    }
+  .nav-tab:not(.active) {
+    background: transparent;
+    color: var(--texte-dim);
+  }
 
-    .nav-tab:not(.active) {
-      background: transparent;
-      color: var(--texte-dim);
-    }
+  .nav-tab:not(.active):hover {
+    background: var(--blanc);
+    color: var(--texte);
+  }
 
-    .nav-tab:not(.active):hover {
-      background: var(--gris-moyen);
-      color: var(--texte);
-    }
+  .badge-annee {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--rouge);
+    background: var(--rouge-clair);
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
 
-    .badge-annee {
-      font-family: 'Bebas Neue', monospace;
-      font-size: 13px;
-      color: var(--or);
-      background: rgba(244,164,38,0.1);
-      padding: 4px 12px;
-      border-radius: 4px;
-      border: 1px solid rgba(244,164,38,0.3);
-    }
+  /* ========== VUES ========== */
+  .vue { display: none; padding: 32px; }
+  .vue.active { display: block; }
 
-    .vue { display: none; padding: 32px; }
-    .vue.active { display: block; }
+  /* ========== STATS CARDS ========== */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }
 
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 16px;
-      margin-bottom: 32px;
-    }
+  .stat-card {
+    background: var(--blanc);
+    border-radius: 20px;
+    padding: 22px 20px;
+    border: none;
+    box-shadow: var(--ombre);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
 
-    .stat-card {
-      background: var(--gris-fonce);
-      border-radius: 12px;
-      padding: 20px;
-      border: 1px solid var(--gris-clair);
-      position: relative;
-      overflow: hidden;
-    }
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--ombre-md);
+  }
 
-    .stat-card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 3px;
-      background: var(--rouge);
-    }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: var(--rouge);
+    border-radius: 20px 20px 0 0;
+  }
 
-    .stat-label {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: var(--texte-dim);
-      margin-bottom: 8px;
-    }
+  .stat-card.vert::before { background: var(--vert); }
+  .stat-card.or::before   { background: var(--or); }
+  .stat-card.bleu::before { background: var(--bleu); }
+  .stat-card.orange::before { background: var(--orange); }
 
-    .stat-value {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 42px;
-      line-height: 1;
-      color: var(--texte);
-    }
+  .stat-icon {
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    margin-bottom: 14px;
+  }
+  .stat-card .stat-icon        { background: var(--rouge-clair); }
+  .stat-card.vert .stat-icon   { background: var(--vert-clair); }
+  .stat-card.or .stat-icon     { background: var(--or-clair); }
+  .stat-card.bleu .stat-icon   { background: var(--bleu-clair); }
+  .stat-card.orange .stat-icon { background: var(--orange-clair); }
 
-    .stat-sub {
-      font-size: 12px;
-      color: var(--texte-dim);
-      margin-top: 4px;
-    }
+  .stat-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--texte-dim);
+    margin-bottom: 6px;
+  }
 
-    .card {
-      background: var(--gris-fonce);
-      border-radius: 12px;
-      border: 1px solid var(--gris-clair);
-      overflow: hidden;
-      margin-bottom: 24px;
-    }
+  .stat-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 40px;
+    line-height: 1;
+    color: var(--texte);
+  }
 
-    .card-header {
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--gris-clair);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
+  .stat-sub {
+    font-size: 12px;
+    color: var(--texte-dim);
+    margin-top: 4px;
+  }
 
-    .card-title {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 18px;
-      letter-spacing: 2px;
-      color: var(--texte);
-    }
+  .stat-badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-top: 8px;
+    font-weight: 700;
+  }
+  .badge-vert   { background: var(--vert-clair);  color: var(--vert); }
+  .badge-or     { background: var(--or-clair);    color: var(--or); }
+  .badge-rouge  { background: var(--rouge-clair); color: var(--rouge); }
 
-    .card-body { padding: 20px; }
+  /* ========== MAIN GRID ========== */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
 
-    .equipe-card {
-      background: var(--gris-fonce);
-      border-radius: 12px;
-      border: 1px solid var(--gris-clair);
-      padding: 16px;
-      cursor: pointer;
-      transition: all 0.2s;
-      margin-bottom: 16px;
-    }
+  .card {
+    background: var(--blanc);
+    border-radius: 20px;
+    border: none;
+    box-shadow: var(--ombre);
+    overflow: hidden;
+  }
 
-    .equipe-card:hover {
-      border-color: var(--rouge);
-      transform: translateY(-2px);
-    }
+  .card-header {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--gris-clair);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
 
-    .equipe-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-    }
+  .card-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 17px;
+    letter-spacing: 1.5px;
+    color: var(--texte);
+  }
 
-    .equipe-nom {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 16px;
-      letter-spacing: 1.5px;
-    }
+  .card-body { padding: 22px; }
 
-    .equipe-code {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13px;
-      background: var(--gris-clair);
-      padding: 3px 8px;
-      border-radius: 4px;
-      color: var(--or);
-    }
+  /* ========== CHART ========== */
+  .chart-container {
+    position: relative;
+    height: 240px;
+  }
 
-    .progress-bar {
-      height: 6px;
-      background: var(--gris-clair);
-      border-radius: 3px;
-      overflow: hidden;
-      margin-bottom: 8px;
-    }
+  /* ========== ÉQUIPES TABLE ========== */
+  .equipes-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
 
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, var(--rouge), var(--or));
-      border-radius: 3px;
-    }
+  .equipe-card {
+    background: var(--blanc);
+    border-radius: 20px;
+    border: 2px solid transparent;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.25s;
+    box-shadow: var(--ombre);
+  }
 
-    .btn {
-      padding: 10px 20px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      border: none;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      transition: all 0.2s;
-    }
+  .equipe-card:hover {
+    border-color: var(--rouge);
+    transform: translateY(-3px);
+    box-shadow: var(--ombre-md);
+  }
 
-    .btn-rouge {
-      background: var(--rouge);
-      color: white;
-    }
-    .btn-rouge:hover { background: var(--rouge-sombre); }
+  .equipe-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
 
-    .btn-outline {
-      background: transparent;
-      color: var(--texte);
-      border: 1px solid var(--gris-clair);
-    }
-    .btn-outline:hover { border-color: var(--rouge); color: var(--rouge); }
+  .equipe-nom {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 17px;
+    letter-spacing: 1.5px;
+    color: var(--texte);
+  }
 
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.8);
-      z-index: 200;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      backdrop-filter: blur(4px);
-    }
+  .equipe-code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: var(--rouge-clair);
+    padding: 3px 9px;
+    border-radius: 20px;
+    color: var(--rouge);
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
 
-    .modal-overlay.open { display: flex; }
+  .equipe-membres {
+    font-size: 13px;
+    color: var(--texte-dim);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
 
-    .modal {
-      background: var(--gris-fonce);
-      border-radius: 16px;
-      border: 1px solid var(--gris-clair);
-      width: 560px;
-      max-width: 95vw;
-      max-height: 85vh;
-      overflow-y: auto;
-    }
+  .progress-bar {
+    height: 8px;
+    background: var(--gris-clair);
+    border-radius: 99px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
 
-    .modal-header {
-      padding: 24px 24px 16px;
-      border-bottom: 1px solid var(--gris-clair);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--rouge), var(--orange));
+    border-radius: 99px;
+    transition: width 0.6s ease;
+  }
 
-    .modal-title {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 22px;
-      letter-spacing: 2px;
-    }
+  .equipe-stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+  }
 
-    .modal-close {
-      background: none;
-      border: none;
-      color: var(--texte-dim);
-      font-size: 22px;
-      cursor: pointer;
-      padding: 4px 8px;
-      border-radius: 4px;
-      transition: all 0.2s;
-    }
+  .equipe-stat { color: var(--texte-dim); }
+  .equipe-stat strong { color: var(--texte); font-weight: 700; }
 
-    .modal-close:hover { color: var(--rouge); background: rgba(214,40,40,0.1); }
+  /* ========== STATUS DOT ========== */
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+    flex-shrink: 0;
+  }
+  .dot-vert  { background: var(--vert); box-shadow: 0 0 0 3px rgba(22,163,74,0.15); }
+  .dot-or    { background: var(--or); }
+  .dot-rouge { background: var(--rouge); }
 
-    .modal-body { padding: 24px; }
+  /* ========== BOUTONS ========== */
+  .btn {
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    letter-spacing: 0.5px;
+    transition: all 0.2s;
+  }
 
-    .form-group { margin-bottom: 16px; }
+  .btn-rouge {
+    background: var(--rouge);
+    color: white;
+    box-shadow: 0 2px 8px rgba(230,51,41,0.25);
+  }
+  .btn-rouge:hover {
+    background: var(--rouge-sombre);
+    box-shadow: 0 4px 14px rgba(230,51,41,0.35);
+    transform: translateY(-1px);
+  }
 
-    .form-label {
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: var(--texte-dim);
-      margin-bottom: 6px;
-      display: block;
-    }
+  .btn-outline {
+    background: transparent;
+    color: var(--texte-dim);
+    border: 1.5px solid var(--gris-clair);
+  }
+  .btn-outline:hover { border-color: var(--rouge); color: var(--rouge); background: var(--rouge-clair); }
 
-    .form-input {
-      width: 100%;
-      background: var(--gris-moyen);
-      border: 1px solid var(--gris-clair);
-      border-radius: 8px;
-      padding: 10px 14px;
-      color: var(--texte);
-      font-size: 14px;
-      font-family: 'DM Sans', sans-serif;
-      transition: border-color 0.2s;
-    }
+  .btn-vert {
+    background: var(--vert);
+    color: white;
+  }
 
-    .form-input:focus {
-      outline: none;
-      border-color: var(--rouge);
-    }
+  /* ========== MODAL ========== */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(17,24,39,0.45);
+    z-index: 200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(6px);
+  }
 
-    .form-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
+  .modal-overlay.open { display: flex; }
 
-    .table-paiements {
-      width: 100%;
-      border-collapse: collapse;
-    }
+  .modal {
+    background: var(--blanc);
+    border-radius: 24px;
+    border: none;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    width: 560px;
+    max-width: 95vw;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
 
-    .table-paiements th {
-      text-align: left;
-      padding: 10px 12px;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: var(--texte-dim);
-      border-bottom: 1px solid var(--gris-clair);
-    }
+  .modal-large {
+    width: 95vw;
+    max-width: 1100px;
+    max-height: 94vh;
+  }
 
-    .table-paiements td {
-      padding: 12px;
-      font-size: 13px;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-    }
+  .modal-header {
+    padding: 24px 24px 18px;
+    border-bottom: 1px solid var(--gris-clair);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
 
-    .flex-between {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 16px;
-    }
+  .modal-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 2px;
+    color: var(--texte);
+  }
 
-    .section-title {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 22px;
-      letter-spacing: 2px;
-      margin-bottom: 16px;
-      color: var(--texte);
-    }
+  .modal-close {
+    background: var(--fond);
+    border: none;
+    color: var(--texte-dim);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 8px;
+    transition: all 0.2s;
+    font-weight: 700;
+  }
 
-    .paiement-summary {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-      margin-bottom: 24px;
-    }
+  .modal-close:hover { color: var(--rouge); background: var(--rouge-clair); }
 
-    .pay-card {
-      background: var(--gris-fonce);
-      border-radius: 12px;
-      padding: 20px;
-      text-align: center;
-      border: 1px solid var(--gris-clair);
-    }
+  .modal-body { padding: 24px; }
 
-    .pay-icon { font-size: 28px; margin-bottom: 8px; }
-    .pay-amount {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 36px;
-      color: var(--or);
-    }
-    .pay-label {
-      font-size: 12px;
-      color: var(--texte-dim);
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-top: 4px;
-    }
+  /* ========== FORMULAIRE ========== */
+  .form-group { margin-bottom: 16px; }
 
-    .chart-container {
-      position: relative;
-      height: 240px;
-    }
-  </style>
+  .form-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--texte-dim);
+    margin-bottom: 7px;
+    display: block;
+  }
+
+  .form-input {
+    width: 100%;
+    background: var(--fond);
+    border: 1.5px solid var(--gris-clair);
+    border-radius: 12px;
+    padding: 11px 14px;
+    color: var(--texte);
+    font-size: 14px;
+    font-family: 'DM Sans', sans-serif;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .form-input:focus {
+    outline: none;
+    border-color: var(--rouge);
+    box-shadow: 0 0 0 3px rgba(230,51,41,0.1);
+    background: var(--blanc);
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  /* ========== CODE TOURNÉE ========== */
+  .code-display {
+    text-align: center;
+    padding: 32px;
+  }
+
+  .code-big {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 52px;
+    font-weight: 700;
+    letter-spacing: 12px;
+    color: var(--rouge);
+    margin-bottom: 12px;
+  }
+
+  .code-label {
+    font-size: 13px;
+    color: var(--texte-dim);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  /* ========== TOURNÉE LISTE ========== */
+  .tournee-item {
+    display: flex;
+    align-items: center;
+    padding: 13px 16px;
+    border-radius: 14px;
+    margin-bottom: 8px;
+    background: var(--fond);
+    gap: 12px;
+    transition: background 0.2s;
+  }
+
+  .tournee-item:hover { background: var(--rouge-clair); }
+
+  .tournee-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--texte-dim);
+    min-width: 28px;
+  }
+
+  .tournee-adresse {
+    flex: 1;
+    font-size: 13px;
+    color: var(--texte);
+  }
+
+  .tournee-qty {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    color: var(--orange);
+    min-width: 30px;
+    text-align: right;
+  }
+
+  .tournee-paiement {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 700;
+  }
+
+  .paiement-espece  { background: var(--vert-clair); color: var(--vert); }
+  .paiement-cheque  { background: var(--bleu-clair); color: var(--bleu); }
+  .paiement-cb { background: var(--or-clair);  color: var(--or); }
+
+  /* ========== VUE BINOME ========== */
+  .binome-wrap { max-width: 420px; margin: 0 auto; }
+
+  .phone-frame {
+    background: var(--blanc);
+    border-radius: 24px;
+    border: 2px solid var(--gris-clair);
+    overflow: hidden;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.15);
+  }
+
+  .phone-bar {
+    background: var(--rouge);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .phone-bar-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 2px;
+  }
+
+  .phone-body { padding: 20px; }
+
+  .code-input-wrap {
+    text-align: center;
+    padding: 32px 20px;
+  }
+
+  .code-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 3px;
+    margin-bottom: 8px;
+  }
+
+  .code-subtitle {
+    font-size: 13px;
+    color: var(--texte-dim);
+    margin-bottom: 24px;
+  }
+
+  .code-input {
+    width: 100%;
+    background: var(--fond);
+    border: 2px solid var(--gris-clair);
+    border-radius: 14px;
+    padding: 16px;
+    color: var(--rouge);
+    font-size: 28px;
+    font-family: 'JetBrains Mono', monospace;
+    text-align: center;
+    letter-spacing: 8px;
+    text-transform: uppercase;
+    transition: border-color 0.2s;
+  }
+
+  .code-input:focus { outline: none; border-color: var(--rouge); }
+
+  .binome-tournee { display: none; }
+
+  .binome-card {
+    background: var(--fond);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .binome-adresse-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 14px;
+    border-radius: 14px;
+    margin-bottom: 8px;
+    background: var(--blanc);
+    border: 1.5px solid var(--gris-clair);
+    gap: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: var(--ombre);
+  }
+
+  .binome-adresse-item.fait {
+    opacity: 0.6;
+    border-color: var(--vert);
+    background: var(--vert-clair);
+  }
+
+  .binome-adresse-item:hover:not(.fait) { border-color: var(--rouge); background: var(--rouge-clair); }
+
+  .binome-check {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--gris-clair);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+    transition: all 0.2s;
+  }
+
+  .fait .binome-check {
+    background: var(--vert);
+    border-color: var(--vert);
+    color: white;
+    font-size: 12px;
+  }
+
+  .binome-adresse-text { flex: 1; }
+  .binome-adresse-nom  { font-size: 14px; font-weight: 600; margin-bottom: 2px; color: var(--texte); }
+  .binome-adresse-rue  { font-size: 12px; color: var(--texte-dim); }
+
+  .binome-recap {
+    background: linear-gradient(135deg, var(--rouge), var(--orange));
+    border-radius: 16px;
+    padding: 18px;
+    margin-bottom: 12px;
+    color: white;
+  }
+
+  .recap-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    text-align: center;
+  }
+
+  .recap-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+  }
+
+  .recap-lbl {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.8;
+  }
+
+  /* ========== PAIEMENT MINI ========== */
+  /* ========== MODAL PAIEMENT BINÔME ========== */
+  .pay-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    z-index: 500;
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    backdrop-filter: blur(6px);
+  }
+  .pay-modal-overlay.open { display: flex; }
+
+  .pay-modal {
+    background: var(--blanc);
+    border-radius: 24px 24px 0 0;
+    width: 100%;
+    max-width: 420px;
+    padding: 20px 16px 32px;
+    border-top: 4px solid var(--rouge);
+    animation: slideUp 0.25s ease;
+    box-shadow: 0 -8px 40px rgba(0,0,0,0.12);
+  }
+
+  .pay-modal-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 2px;
+    text-align: center;
+    margin-bottom: 4px;
+    color: var(--texte);
+  }
+
+  .pay-modal-sub {
+    font-size: 12px;
+    color: var(--texte-dim);
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .pay-montant-display {
+    background: var(--fond);
+    border-radius: 14px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    border: 1.5px solid var(--gris-clair);
+  }
+
+  .pay-montant-label { font-size: 11px; color: var(--texte-dim); text-transform: uppercase; letter-spacing: 1px; }
+  .pay-montant-val   { font-family: 'Bebas Neue', sans-serif; font-size: 28px; color: var(--rouge); }
+  .pay-montant-due   { font-size: 11px; color: var(--texte-dim); }
+  .pay-montant-due span { color: var(--vert); font-weight: 700; }
+
+  .pay-mode-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+
+  .pay-mode-tab {
+    flex: 1; padding: 8px 4px; border-radius: 12px;
+    border: 2px solid var(--gris-clair);
+    background: var(--fond);
+    color: var(--texte-dim);
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px;
+    cursor: pointer; transition: all 0.2s; text-align: center;
+  }
+
+  .pay-mode-tab.active-esp { border-color: var(--vert);  color: var(--vert);  background: var(--vert-clair); }
+  .pay-mode-tab.active-chq { border-color: var(--bleu);  color: var(--bleu);  background: var(--bleu-clair); }
+  .pay-mode-tab.active-cb { border-color: #7C3AED; color: #7C3AED; background: #F5F3FF; }
+  .pay-mode-tab.active-tpe { border-color: var(--or);   color: var(--or);   background: var(--or-clair); }
+
+  .cash-section { display: none; }
+  .cash-section.active { display: block; }
+
+  .cash-section-title {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 2px;
+    color: var(--texte-dim); margin-bottom: 8px; margin-top: 4px;
+  }
+
+  .tpe-section { display: none; }
+  .tpe-section.active { display: block; text-align: center; padding: 8px 0 4px; }
+  .tpe-visual { margin: 0 auto 12px; width: 120px; }
+
+  .tpe-confirm {
+    background: var(--or); color: white; border: none; border-radius: 14px;
+    padding: 14px 32px; font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px; letter-spacing: 2px; cursor: pointer; width: 100%; transition: all 0.2s;
+  }
+  .tpe-confirm:hover { background: #D97706; }
+
+  .simple-confirm-section { display: none; text-align: center; padding: 8px 0 4px; }
+  .simple-confirm-section.active { display: block; }
+  .simple-icon { font-size: 52px; margin-bottom: 8px; }
+  .simple-label { font-size: 13px; color: var(--texte-dim); margin-bottom: 16px; }
+
+  .pay-valider {
+    width: 100%; padding: 14px; border-radius: 14px;
+    background: var(--rouge); color: white;
+    font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 2px;
+    border: none; cursor: pointer; margin-top: 8px; transition: all 0.2s;
+    box-shadow: 0 4px 14px rgba(230,51,41,0.3);
+  }
+  .pay-valider:hover { background: var(--rouge-sombre); transform: translateY(-1px); }
+  .pay-valider:disabled { background: var(--gris-clair); color: var(--texte-dim); cursor: not-allowed; box-shadow: none; transform: none; }
+
+  .pay-annuler {
+    width: 100%; padding: 10px; border-radius: 10px;
+    background: transparent; color: var(--texte-dim);
+    font-size: 13px; border: none; cursor: pointer; margin-top: 6px;
+  }
+
+  .mode-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; padding: 3px 10px; border-radius: 20px;
+    font-weight: 700; margin-top: 4px; text-transform: uppercase; letter-spacing: 1px;
+  }
+  .mode-esp { background: var(--vert-clair); color: var(--vert); }
+  .mode-chq { background: var(--bleu-clair); color: var(--bleu); }
+  .mode-cb { background: #F5F3FF; color: #7C3AED; }
+  .mode-tpe { background: var(--or-clair);  color: var(--or); }
+
+  /* ========== PAIEMENTS VUE ========== */
+  .paiement-summary {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 16px; margin-bottom: 24px;
+  }
+
+  .pay-card {
+    background: var(--blanc); border-radius: 20px;
+    padding: 24px 20px; text-align: center;
+    box-shadow: var(--ombre); transition: transform 0.2s;
+  }
+  .pay-card:hover { transform: translateY(-2px); box-shadow: var(--ombre-md); }
+
+  .pay-icon { font-size: 32px; margin-bottom: 10px; }
+  .pay-amount { font-family: 'Bebas Neue', sans-serif; font-size: 38px; color: var(--texte); }
+  .pay-label  { font-size: 12px; color: var(--texte-dim); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+
+  .table-paiements { width: 100%; border-collapse: collapse; }
+
+  .table-paiements th {
+    text-align: left; padding: 10px 14px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1.5px; color: var(--texte-dim);
+    border-bottom: 2px solid var(--gris-clair); background: var(--fond);
+  }
+
+  .table-paiements td {
+    padding: 13px 14px; font-size: 13px;
+    border-bottom: 1px solid var(--gris-clair); color: var(--texte);
+  }
+
+  .table-paiements tr:hover td { background: var(--fond); }
+
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 2px;
+    margin-bottom: 16px;
+    color: var(--texte);
+  }
+
+  .flex-between {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .flamme { color: var(--rouge); }
+
+  .map-placeholder {
+    background: var(--gris-moyen);
+    border-radius: 8px;
+    height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--texte-dim);
+    font-size: 13px;
+    border: 1px dashed var(--gris-clair);
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .map-icon { font-size: 32px; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .live { animation: pulse 2s infinite; }
+
+  /* ===== CARTE (adapté palette claire) ===== */
+  #map {
+    width: 100%;
+    height: 60vh;
+    min-height: 420px;
+    border-radius: 12px;
+    margin-bottom: 14px;
+    border: 1px solid var(--gris-clair);
+  }
+
+  .success {
+    background: var(--vert-clair);
+    color: var(--vert);
+    padding: 14px 16px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    border-left: 4px solid var(--vert);
+    font-size: 13px;
+  }
+
+  .error {
+    background: var(--rouge-clair);
+    color: var(--rouge);
+    padding: 14px 16px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    border-left: 4px solid var(--rouge);
+    font-size: 13px;
+  }
+
+  .info {
+    background: var(--bleu-clair);
+    color: var(--bleu);
+    padding: 14px 16px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    border-left: 4px solid var(--bleu);
+    font-size: 13px;
+  }
+
+  .map-controls {
+    background: var(--fond-alt);
+    padding: 14px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    border: 1px solid var(--gris-clair);
+  }
+
+  .map-controls-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--texte-dim);
+    margin-bottom: 10px;
+  }
+
+  .tournee-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    gap: 12px;
+  }
+
+  .tournee-nom {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    letter-spacing: 1.5px;
+    flex: 1;
+    color: var(--texte);
+  }
+
+  .tournee-code-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: var(--or-clair);
+    padding: 4px 10px;
+    border-radius: 6px;
+    color: var(--or);
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+
+  .tournee-info {
+    font-size: 12px;
+    color: var(--texte-dim);
+  }
+</style>
 </head>
 <body>
 
 <!-- HEADER -->
 <div class="header">
-  <div class="logo">🔥 Calendrier<span>Sales</span></div>
+  <div class="logo"><div class="logo-icon">🔥</div>Calendrier<span>Pompiers</span></div>
   <div class="nav-tabs">
-    <button class="nav-tab active" onclick="showVue('dashboard')">Dashboard</button>
-    <button class="nav-tab" onclick="showVue('equipes')">Équipes</button>
-    <button class="nav-tab" onclick="showVue('tournees')">Tournées & Binômes</button>
-    <button class="nav-tab" onclick="showVue('paiements')">Paiements</button>
+    <button class="nav-tab active" onclick="showVue('dashboard')">📊 Dashboard</button>
+    <button class="nav-tab" onclick="showVue('tournees')">🗺️ Tournées</button>
+    <button class="nav-tab" onclick="showVue('paiements')">💰 Paiements</button>
   </div>
-  <div class="badge-annee">Campagne 2025</div>
+  <div class="badge-annee" onclick="allerSetup()" style="cursor:pointer" title="Cliquez pour changer de campagne">Campagne 2025</div>
 </div>
 
+<!-- ============================================================ -->
 <!-- VUE DASHBOARD -->
+<!-- ============================================================ -->
 <div class="vue active" id="vue-dashboard">
+
+  <!-- ÉCRAN DÉMARRAGE CAMPAGNE -->
+  <div id="setup-screen" style="display:none">
+
+    <!-- Fond plein écran avec dégradé -->
+    <div style="min-height:calc(100vh - 64px);display:grid;grid-template-columns:1fr 1fr;gap:0">
+
+      <!-- GAUCHE : identité -->
+      <div style="padding:64px 56px;display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--gris-clair);background:linear-gradient(160deg, var(--rouge-clair) 0%, var(--fond) 60%)">
+        <div style="font-size:72px;margin-bottom:20px;line-height:1">🔥</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:64px;line-height:0.9;letter-spacing:4px;margin-bottom:12px">
+          Calendrier<br><span style="color:var(--rouge)">Pompiers</span>
+        </div>
+        <div style="width:48px;height:3px;background:var(--rouge);margin:20px 0"></div>
+        <div style="font-size:15px;color:var(--texte-dim);line-height:1.9;max-width:380px">
+          Gérez votre campagne de vente de calendriers de A à Z — tournées, carte interactive, encaissements et statistiques en temps réel.
+        </div>
+
+        <!-- Historique campagnes -->
+        <div style="margin-top:40px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:3px;color:var(--texte-dim);margin-bottom:14px;display:flex;align-items:center;gap:8px"><span style="width:20px;height:2px;background:var(--rouge);display:inline-block;border-radius:2px"></span>Campagnes précédentes</div>
+          <div id="historique-campagnes">
+            <div style="font-size:13px;color:var(--texte-dim);font-style:italic">Aucune campagne enregistrée</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DROITE : formulaire nouvelle campagne -->
+      <div style="padding:64px 56px;display:flex;flex-direction:column;justify-content:center;background:var(--blanc)">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+          <div style="width:44px;height:44px;background:linear-gradient(135deg,var(--rouge),var(--orange));border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:var(--ombre-rouge)">🚒</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:3px;color:var(--texte)">Nouvelle Campagne</div>
+        </div>
+        <div style="font-size:14px;color:var(--texte-dim);margin-bottom:36px;line-height:1.6">
+          Renseignez les informations pour démarrer votre campagne de vente.
+        </div>
+
+        <!-- Nom de la caserne -->
+        <div style="margin-bottom:20px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--texte-dim);margin-bottom:8px">Nom de la caserne</div>
+          <input id="caserne-input" type="text" placeholder="Ex : Caserne de Lyon"
+            class="form-input" style="font-size:20px;font-family:'DM Sans',sans-serif;text-align:center;padding:14px">
+        </div>
+
+        <!-- Année -->
+        <div style="margin-bottom:20px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--texte-dim);margin-bottom:8px">Année de la campagne</div>
+          <input id="annee-input" type="number" min="2000" max="2100" placeholder="Ex : 2025"
+            class="form-input" style="font-size:32px;font-family:'Bebas Neue',sans-serif;letter-spacing:4px;text-align:center;padding:16px"
+            oninput="onAnneeChange(this.value)">
+        </div>
+
+        <!-- Nb calendriers -->
+        <div style="margin-bottom:32px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--texte-dim);margin-bottom:8px">Nombre total de calendriers imprimés</div>
+          <input id="setup-total-cal" type="number" min="1" placeholder="Ex : 1200"
+            class="form-input" style="font-size:32px;font-family:'Bebas Neue',sans-serif;letter-spacing:4px;text-align:center;padding:16px">
+          <div style="font-size:11px;color:var(--texte-dim);margin-top:6px;text-align:center">Vous pourrez modifier ce chiffre plus tard</div>
+        </div>
+
+        <button onclick="validerSetup()" class="btn btn-rouge" style="width:100%;padding:18px;font-size:18px;letter-spacing:2px;border-radius:14px;box-shadow:var(--ombre-rouge)">
+          🚀 Lancer la campagne
+        </button>
+
+        <!-- Reprendre campagne existante -->
+        <div id="reprendre-wrap" style="display:none;margin-top:16px">
+          <div style="text-align:center;font-size:12px;color:var(--texte-dim);margin-bottom:10px">— ou —</div>
+          <button onclick="reprendreCampagne()" style="width:100%;padding:12px;border-radius:10px;background:transparent;border:1px solid var(--gris-clair);color:var(--texte);font-size:13px;cursor:pointer;font-weight:600;letter-spacing:1px">
+            📂 Reprendre la dernière campagne
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- DASHBOARD PRINCIPAL -->
+  <div id="dashboard-main" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:28px">
+      <button onclick="allerSetup()" style="background:var(--blanc);border:1.5px solid var(--gris-clair);color:var(--texte-dim);border-radius:10px;padding:9px 16px;font-size:12px;cursor:pointer;font-weight:600;transition:all 0.2s;display:flex;align-items:center;gap:6px"
+        onmouseover="this.style.borderColor='var(--rouge)';this.style.color='var(--rouge)'"
+        onmouseout="this.style.borderColor='var(--gris-clair)';this.style.color='var(--texte-dim)'">
+        ← Changer de campagne
+      </button>
+      <div style="display:flex;align-items:center;gap:10px;background:var(--blanc);padding:8px 16px;border-radius:12px;box-shadow:var(--ombre)">
+        <span style="font-size:20px">🔥</span>
+        <span style="font-size:13px;color:var(--texte-dim);font-weight:500">Total imprimés :</span>
+        <span style="font-family:'Bebas Neue',sans-serif;color:var(--rouge);font-size:20px;letter-spacing:1px" id="badge-total-cal">0</span>
+        <span style="font-size:13px;color:var(--texte-dim)">calendriers</span>
+        <button onclick="openModal('modal-config')" style="background:var(--rouge-clair);border:none;color:var(--rouge);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-weight:700">✏️</button>
+        <button onclick="exporterExcel()" style="background:var(--vert-clair);border:none;color:var(--vert);border-radius:8px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700;letter-spacing:1px">📊 Export Excel</button>
+      </div>
+    </div>
+
   <div class="stats-grid">
     <div class="stat-card">
+      <div class="stat-icon">📅</div>
       <div class="stat-label">Calendriers vendus</div>
-      <div class="stat-value">847</div>
-      <div class="stat-sub">sur 1 200 distribués</div>
+      <div class="stat-value" id="stat-vendus">0</div>
+      <div class="stat-sub" id="stat-vendus-sub">sur 0 distribués</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card bleu">
+      <div class="stat-icon">📦</div>
+      <div class="stat-label">Calendriers restants</div>
+      <div class="stat-value" id="stat-restants">0</div>
+      <div class="stat-sub" id="stat-restants-sub">à distribuer</div>
+    </div>
+    <div class="stat-card vert">
+      <div class="stat-icon">💰</div>
       <div class="stat-label">Recette totale</div>
-      <div class="stat-value">6 776€</div>
-      <div class="stat-sub">Objectif : 9 600€</div>
+      <div class="stat-value" id="stat-recette">0€</div>
+      <div class="stat-sub" id="stat-recette-sub">Objectif : 0€</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-label">Équipes actives</div>
-      <div class="stat-value">6</div>
-      <div class="stat-sub">sur 6 équipes</div>
+    <div class="stat-card or">
+      <div class="stat-icon">🗺️</div>
+      <div class="stat-label">Tournées actives</div>
+      <div class="stat-value" id="stat-tournees">0</div>
+      <div class="stat-sub">en cours</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-label">Adresses visitées</div>
-      <div class="stat-value">312</div>
-      <div class="stat-sub">sur 480 prévues</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Restants en stock</div>
-      <div class="stat-value">353</div>
-      <div class="stat-sub">à distribuer</div>
+    <div class="stat-card orange">
+      <div class="stat-icon">🔥</div>
+      <div class="stat-label">Total campagne</div>
+      <div class="stat-value" id="stat-total">0</div>
+      <div class="stat-sub">calendriers imprimés</div>
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title">Paiements</div>
+  <div class="main-grid">
+    <!-- GRAPHIQUE -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Ventes par tournée</div>
+      </div>
+      <div class="card-body">
+        <div class="chart-container">
+          <canvas id="chartTournees"></canvas>
+        </div>
+      </div>
     </div>
-    <div class="card-body">
-      <div style="margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-          <span style="font-size:12px;color:var(--texte-dim)">💵 Espèces</span>
-          <span style="font-family:'JetBrains Mono',monospace;color:var(--vert);font-size:13px">3 240€</span>
-        </div>
-        <div class="progress-bar"><div class="progress-fill" style="width:47%;background:var(--vert)"></div></div>
+
+    <!-- PAIEMENTS RAPIDES -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Paiements</div>
       </div>
-      <div style="margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-          <span style="font-size:12px;color:var(--texte-dim)">🏦 Chèque</span>
-          <span style="font-family:'JetBrains Mono',monospace;color:var(--bleu);font-size:13px">2 536€</span>
+      <div class="card-body">
+        <div style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:12px;color:var(--texte-dim)">💵 Espèces</span>
+            <span style="font-family:'JetBrains Mono',monospace;color:var(--vert);font-size:13px" id="esp-total">0€</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" id="esp-bar" style="width:0%;background:var(--vert)"></div></div>
         </div>
-        <div class="progress-bar"><div class="progress-fill" style="width:37%;background:var(--bleu)"></div></div>
-      </div>
-      <div style="margin-bottom:24px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-          <span style="font-size:12px;color:var(--texte-dim)">📲 Virement</span>
-          <span style="font-family:'JetBrains Mono',monospace;color:var(--or);font-size:13px">1 000€</span>
+        <div style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:12px;color:var(--texte-dim)">🏦 Chèque</span>
+            <span style="font-family:'JetBrains Mono',monospace;color:var(--bleu);font-size:13px" id="che-total">0€</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" id="che-bar" style="width:0%;background:var(--bleu)"></div></div>
         </div>
-        <div class="progress-bar"><div class="progress-fill" style="width:16%;background:var(--or)"></div></div>
+        <div style="margin-bottom:24px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:12px;color:var(--texte-dim)">📲 Virement</span>
+            <span style="font-family:'JetBrains Mono',monospace;color:var(--or);font-size:13px" id="vir-total">0€</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" id="vir-bar" style="width:0%;background:var(--or)"></div></div>
+        </div>
+        <div style="border-top:1px solid var(--gris-clair);padding-top:14px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;color:var(--texte-dim)">📍 Adresses visitées</span>
+          <span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--texte)" id="stat-adresses">0</span>
+        </div>
       </div>
     </div>
   </div>
-</div>
+  </div><!-- fin dashboard-main -->
+</div><!-- fin vue-dashboard -->
 
-<!-- VUE ÉQUIPES -->
-<div class="vue" id="vue-equipes">
-  <div class="flex-between">
-    <div class="section-title">🧑‍🚒 Gestion des Équipes</div>
-    <button class="btn btn-rouge" onclick="openModal('modal-equipe')">+ Nouvelle équipe</button>
-  </div>
-
-  <div id="equipes-container"></div>
-</div>
-
+<!-- ============================================================ -->
 <!-- VUE TOURNÉES -->
+<!-- ============================================================ -->
 <div class="vue" id="vue-tournees">
   <div class="flex-between">
     <div class="section-title">🗺️ Gestion des Tournées</div>
     <button class="btn btn-rouge" onclick="openModal('modal-tournee')">+ Créer une tournée</button>
   </div>
 
-  <div id="tournees-container"></div>
+  <div id="tournees-container" class="card">
+    <div class="card-header">
+      <div class="card-title">Liste des tournées</div>
+    </div>
+    <div class="card-body">
+      <div id="tournees-list" style="color: var(--texte-dim); text-align: center; padding: 40px 0;">
+        Aucune tournée créée. Cliquez sur "Créer une tournée" pour commencer.
+      </div>
+    </div>
+  </div>
 </div>
 
+<!-- ============================================================ -->
 <!-- VUE PAIEMENTS -->
+<!-- ============================================================ -->
 <div class="vue" id="vue-paiements">
   <div class="section-title">💰 Suivi des Paiements</div>
 
   <div class="paiement-summary">
     <div class="pay-card">
       <div class="pay-icon">💵</div>
-      <div class="pay-amount">3 240€</div>
+      <div class="pay-amount" id="pay-esp">0€</div>
       <div class="pay-label">Espèces</div>
     </div>
     <div class="pay-card">
       <div class="pay-icon">🏦</div>
-      <div class="pay-amount">2 536€</div>
+      <div class="pay-amount" id="pay-che">0€</div>
       <div class="pay-label">Chèques</div>
     </div>
     <div class="pay-card">
       <div class="pay-icon">📲</div>
-      <div class="pay-amount">1 000€</div>
+      <div class="pay-amount" id="pay-vir">0€</div>
       <div class="pay-label">Virements</div>
     </div>
   </div>
@@ -571,12 +1270,11 @@
       <table class="table-paiements">
         <thead>
           <tr>
-            <th>Heure</th>
-            <th>Équipe</th>
-            <th>Adresse</th>
-            <th>Qté</th>
+            <th>Tournée</th>
+            <th>Chef</th>
+            <th>Binôme</th>
+            <th>Calendriers</th>
             <th>Montant</th>
-            <th>Mode</th>
           </tr>
         </thead>
         <tbody id="paiements-table"></tbody>
@@ -585,181 +1283,1498 @@
   </div>
 </div>
 
-<!-- VUE BINÔME -->
-<div class="vue" id="vue-binome">
-  <div class="section-title">📱 Vue Binôme</div>
-  <div class="card">
-    <div class="card-body">
-      <p style="color: var(--texte-dim);">Interface binôme - À développer dans l'étape 2 avec la carte intégrée.</p>
-    </div>
-  </div>
-</div>
-
-<!-- MODALS -->
-<div class="modal-overlay" id="modal-equipe">
-  <div class="modal">
-    <div class="modal-header">
-      <div class="modal-title">🧑‍🚒 Nouvelle Équipe</div>
-      <button class="modal-close" onclick="closeModal('modal-equipe')">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label class="form-label">Nom de l'équipe</label>
-        <input class="form-input" type="text" placeholder="Ex: Équipe Charlie" id="eq-nom">
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Pompier 1</label>
-          <input class="form-input" type="text" placeholder="Prénom Nom" id="eq-p1">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Pompier 2</label>
-          <input class="form-input" type="text" placeholder="Prénom Nom" id="eq-p2">
-        </div>
-      </div>
-      <div style="text-align:right;margin-top:8px">
-        <button class="btn btn-outline" style="margin-right:8px" onclick="closeModal('modal-equipe')">Annuler</button>
-        <button class="btn btn-rouge" onclick="ajouterEquipe()">Créer l'équipe</button>
-      </div>
-    </div>
-  </div>
-</div>
-
+<!-- ============================================================ -->
+<!-- MODAL CRÉER TOURNÉE -->
+<!-- ============================================================ -->
 <div class="modal-overlay" id="modal-tournee">
-  <div class="modal">
+  <div class="modal" id="modal-tournee-inner">
     <div class="modal-header">
       <div class="modal-title">🗺️ Créer une Tournée</div>
       <button class="modal-close" onclick="closeModal('modal-tournee')">✕</button>
     </div>
     <div class="modal-body">
-      <div class="form-group">
-        <label class="form-label">Équipe assignée</label>
-        <select class="form-input" id="t-equipe">
-          <option>Équipe Alpha</option>
-          <option>Équipe Bravo</option>
-        </select>
+      <div id="form-step-1">
+        <div class="form-group">
+          <label class="form-label">Numéro de la tournée</label>
+          <input class="form-input" type="number" placeholder="Ex: 1" id="t-numero" min="1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Chef d'équipe (prénom)</label>
+          <input class="form-input" type="text" placeholder="Ex: Martin" id="t-chef">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Binôme (prénom)</label>
+          <input class="form-input" type="text" placeholder="Ex: Julie" id="t-binome">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nombre de calendriers à distribuer</label>
+          <input class="form-input" type="number" placeholder="Ex: 50" id="t-calendriers" min="1">
+        </div>
+        <div style="text-align:right;margin-top:8px">
+          <button class="btn btn-outline" style="margin-right:8px" onclick="closeModal('modal-tournee')">Annuler</button>
+          <button class="btn btn-rouge" onclick="validerFormulaireTournee()">Suivant →</button>
+        </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Nom de la tournée</label>
-        <input class="form-input" type="text" placeholder="Ex: Quartier Nord" id="t-nom">
-      </div>
-      <div style="text-align:right;margin-top:8px">
-        <button class="btn btn-outline" style="margin-right:8px" onclick="closeModal('modal-tournee')">Annuler</button>
-        <button class="btn btn-rouge" onclick="creerTournee()">Créer la tournée</button>
+
+      <div id="form-step-2" style="display:none">
+        <div class="info" id="info-dessin">
+          📍 Cliquez sur la carte pour placer au moins 3 points et délimiter votre secteur.
+        </div>
+
+        <div id="map"></div>
+
+        <div class="map-controls">
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button class="btn btn-outline" id="btn-annuler-point" onclick="annulerDernierPoint()" disabled style="flex:1">↩ Annuler</button>
+            <button class="btn btn-outline" id="btn-effacer-tout" onclick="effacerToutDessin()" style="flex:1;border-color:var(--or);color:var(--or)">🗑 Tout effacer</button>
+            <button class="btn btn-rouge" id="btn-terminer" onclick="terminerPolygone()" disabled style="flex:1">✓ Terminer</button>
+          </div>
+          <button class="btn btn-outline" id="btn-charger" onclick="chargerAdresses()" disabled style="width:100%">⚡ Charger les adresses du secteur</button>
+        </div>
+
+        <div id="status-map" style="margin-bottom:12px"></div>
+
+        <div style="text-align:right;margin-top:8px">
+          <button class="btn btn-outline" style="margin-right:8px" onclick="retourFormulaire()">← Précédent</button>
+          <button class="btn btn-rouge" id="btn-finaliser" onclick="finalisertournee()" disabled>Créer la tournée</button>
+        </div>
       </div>
     </div>
   </div>
 </div>
 
+<!-- ============================================================ -->
+<!-- MODAL CONFIG CAMPAGNE -->
+<!-- ============================================================ -->
+<div class="modal-overlay" id="modal-config">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <div class="modal-title">⚙️ Paramètres campagne</div>
+      <button class="modal-close" onclick="closeModal('modal-config')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Nom de la caserne</label>
+        <input id="config-caserne" type="text" class="form-input" placeholder="Ex : Caserne de Lyon">
+      </div>
+      <div class="form-group" style="margin-top:16px">
+        <label class="form-label">Nombre total de calendriers imprimés</label>
+        <input id="config-total-cal" type="number" min="1" class="form-input"
+          style="font-size:24px;font-family:'Bebas Neue',sans-serif;letter-spacing:2px;text-align:center">
+      </div>
+      <div style="text-align:right;margin-top:16px">
+        <button class="btn btn-outline" style="margin-right:8px" onclick="closeModal('modal-config')">Annuler</button>
+        <button class="btn btn-rouge" onclick="sauvegarderConfig()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- ============================================================ -->
+<!-- INTERFACE MOBILE BINÔME (accessible via ?binome=1) -->
+<!-- ============================================================ -->
+<div id="app-binome" style="display:none;min-height:100vh;background:var(--fond)">
+
+  <!-- ÉCRAN CONNEXION CODE -->
+  <div id="binome-login" style="min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:24px;background:linear-gradient(160deg, var(--rouge-clair) 0%, var(--fond) 60%)">
+    <div style="font-size:64px;margin-bottom:16px">🔥</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:3px;margin-bottom:6px;text-align:center">Calendrier Pompiers</div>
+    <div style="font-size:14px;color:var(--texte-dim);margin-bottom:36px;text-align:center">Espace binôme — saisie des ventes</div>
+
+    <div style="width:100%;max-width:340px;background:var(--blanc);border-radius:20px;padding:28px;box-shadow:var(--ombre)">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--texte-dim);margin-bottom:10px;text-align:center">Entrez votre code de tournée</div>
+      <input id="binome-code-input" type="text" maxlength="6" placeholder="EX: A7B3K9"
+        style="width:100%;font-family:'JetBrains Mono',monospace;font-size:28px;letter-spacing:8px;text-align:center;text-transform:uppercase;padding:16px;border:2px solid var(--gris-clair);border-radius:14px;margin-bottom:16px"
+        oninput="this.value=this.value.toUpperCase()">
+      <button onclick="connexionBinome()" class="btn btn-rouge" style="width:100%;padding:16px;font-size:16px;letter-spacing:2px;border-radius:14px">
+        Accéder à ma tournée
+      </button>
+      <div id="binome-login-error" style="margin-top:14px"></div>
+    </div>
+  </div>
+
+  <!-- ÉCRAN TOURNÉE BINÔME -->
+  <div id="binome-tournee" style="display:none">
+
+    <!-- Header sticky -->
+    <div style="position:sticky;top:0;background:var(--blanc);border-bottom:1px solid var(--gris-clair);padding:16px 20px;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,0.04)">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px" id="binome-titre">Tournée</div>
+          <div style="font-size:12px;color:var(--texte-dim)" id="binome-sous-titre">—</div>
+        </div>
+        <button onclick="deconnexionBinome()" style="background:var(--fond-alt);border:none;border-radius:10px;padding:8px 12px;font-size:11px;color:var(--texte-dim);cursor:pointer">Quitter</button>
+      </div>
+
+      <!-- Compteurs -->
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <div style="flex:1;background:var(--rouge-clair);border-radius:12px;padding:10px;text-align:center">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--rouge)" id="binome-stat-cal">0</div>
+          <div style="font-size:10px;color:var(--texte-dim);text-transform:uppercase;letter-spacing:1px">Calendriers</div>
+        </div>
+        <div style="flex:1;background:var(--vert-clair);border-radius:12px;padding:10px;text-align:center">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--vert)" id="binome-stat-montant">0€</div>
+          <div style="font-size:10px;color:var(--texte-dim);text-transform:uppercase;letter-spacing:1px">Encaissé</div>
+        </div>
+        <div style="flex:1;background:var(--or-clair);border-radius:12px;padding:10px;text-align:center">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--or)" id="binome-stat-adresses">0/0</div>
+          <div style="font-size:10px;color:var(--texte-dim);text-transform:uppercase;letter-spacing:1px">Adresses</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VUE LISTE -->
+    <div id="binome-adresses-liste" style="padding:16px 20px 90px"></div>
+
+    <!-- VUE CARTE BINÔME -->
+    <div id="binome-vue-carte" style="display:none;position:relative">
+      <div id="map-binome" style="width:100%;height:calc(100vh - 200px)"></div>
+      <button onclick="centrerSurMoi()" style="position:absolute;bottom:16px;right:16px;z-index:1000;background:var(--blanc);border:1px solid var(--gris-clair);border-radius:50%;width:48px;height:48px;font-size:22px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15)">📍</button>
+      <div style="position:absolute;bottom:16px;left:16px;z-index:1000;background:var(--blanc);border-radius:12px;padding:10px 14px;box-shadow:0 2px 8px rgba(0,0,0,0.1);font-size:11px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><svg width="12" height="16" viewBox="0 0 20 28"><line x1="3" y1="0" x2="3" y2="28" stroke="#16A34A" stroke-width="2"/><polygon points="3,2 18,7 3,12" fill="#16A34A"/></svg> Faite</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><svg width="12" height="16" viewBox="0 0 20 28"><line x1="3" y1="0" x2="3" y2="28" stroke="#E8392D" stroke-width="2"/><polygon points="3,2 18,7 3,12" fill="#E8392D"/></svg> À faire</div>
+        <div style="display:flex;align-items:center;gap:6px"><div style="width:12px;height:12px;background:#3B82F6;border-radius:50%"></div> Ma position</div>
+      </div>
+    </div>
+
+    <!-- Barre navigation bas -->
+    <div style="position:fixed;bottom:0;left:0;right:0;background:var(--blanc);border-top:1px solid var(--gris-clair);display:flex;z-index:20;box-shadow:0 -2px 8px rgba(0,0,0,0.06)">
+      <button id="btn-nav-liste" onclick="switchVueBinome('liste')"
+        style="flex:1;padding:14px 8px;border:none;cursor:pointer;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;background:var(--rouge-clair);color:var(--rouge)">
+        ☰ Liste
+      </button>
+      <button id="btn-nav-carte" onclick="switchVueBinome('carte')"
+        style="flex:1;padding:14px 8px;border:none;cursor:pointer;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;background:transparent;color:var(--texte-dim)">
+        🗺️ Carte
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SAISIE VENTE BINÔME -->
+<div class="modal-overlay" id="modal-vente-binome">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <div class="modal-title">💰 Enregistrer une vente</div>
+      <button class="modal-close" onclick="closeModal('modal-vente-binome')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="vente-adresse-label" style="font-size:14px;font-weight:600;margin-bottom:18px;color:var(--texte);background:var(--fond-alt);padding:10px 14px;border-radius:10px"></div>
+
+      <div class="form-group">
+        <label class="form-label">Nombre de calendriers</label>
+        <input id="vente-calendriers" type="number" min="1" value="1" class="form-input"
+          style="font-size:24px;font-family:'Bebas Neue',sans-serif;text-align:center;letter-spacing:2px">
+      </div>
+
+      <div class="form-group" style="margin-top:14px">
+        <label class="form-label">Montant reçu (€)</label>
+        <input id="vente-montant" type="number" min="0" step="0.5" placeholder="Ex : 8" class="form-input"
+          style="font-size:24px;font-family:'Bebas Neue',sans-serif;text-align:center;letter-spacing:2px">
+      </div>
+
+      <div class="form-group" style="margin-top:14px">
+        <label class="form-label">Mode de paiement</label>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button type="button" class="mode-paiement-btn" data-mode="espece" onclick="choisirModePaiement('espece')" style="flex:1;padding:12px 6px;border-radius:10px;border:2px solid var(--gris-clair);background:var(--blanc);cursor:pointer;font-size:12px;font-weight:600">💵<br>Espèces</button>
+          <button type="button" class="mode-paiement-btn" data-mode="cheque" onclick="choisirModePaiement('cheque')" style="flex:1;padding:12px 6px;border-radius:10px;border:2px solid var(--gris-clair);background:var(--blanc);cursor:pointer;font-size:12px;font-weight:600">🏦<br>Chèque</button>
+          <button type="button" class="mode-paiement-btn" data-mode="virement" onclick="choisirModePaiement('virement')" style="flex:1;padding:12px 6px;border-radius:10px;border:2px solid var(--gris-clair);background:var(--blanc);cursor:pointer;font-size:12px;font-weight:600">📲<br>Virement</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:24px">
+        <button class="btn btn-outline" style="flex:1" onclick="closeModal('modal-vente-binome')">Annuler</button>
+        <button class="btn btn-rouge" style="flex:1" onclick="confirmerVenteBinome()">✓ Valider</button>
+      </div>
+    </div>
+  </div>
+</div>
 <script>
-  // Les données sont maintenant chargées depuis Firebase en temps réel (voir <head>)
-  let equipes = [];
-  let tournees = [];
-  let paiements = [];
+// ============================================================
+// DONNÉES (synchronisées Firestore par campagne)
+// ============================================================
+let tournees = [];
+let paiements = [];
+let map;
+let pointsPolygone = [];
+let isDrawing = false;
+let markersPolygone = [];
+let lignePolygone = null;
+let polygoneFinal = null;
+let polygoneValide = false;
+let adresses = [];
+let currentTourneeData = {};
 
-  function showVue(nom) {
-    document.querySelectorAll('.vue').forEach(v => v.classList.remove('active'));
-    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-    document.getElementById('vue-'+nom).classList.add('active');
-    event.currentTarget.classList.add('active');
+// ============================================================
+// CAMPAGNES – gestion multi-années (synchronisé Firestore)
+// ============================================================
+let totalCalCampagne = 0;
+let nomCaserne = '';
+let anneeActive = new Date().getFullYear();
+let campagnes = {}; // { "2025": { total, caserne, tournees, paiements }, ... }
 
-    if(nom==='equipes') renderEquipes();
-    if(nom==='tournees') renderTournees();
-    if(nom==='paiements') renderPaiements();
+let fbUnsubscribe = null;
+let fbSyncing = false; // anti-boucle lors de la réception d'un snapshot
+
+function chargerCampagnes() {
+  try {
+    const saved = localStorage.getItem('cp_campagnes');
+    if (saved) campagnes = JSON.parse(saved);
+  } catch(e) { campagnes = {}; }
+}
+
+function sauvegarderCampagnes() {
+  if (anneeActive) {
+    campagnes[anneeActive] = {
+      total: totalCalCampagne,
+      caserne: nomCaserne,
+      tournees, paiements
+    };
   }
+  localStorage.setItem('cp_campagnes', JSON.stringify(campagnes));
+  fbPush();
+}
 
-  function openModal(id) { document.getElementById(id).classList.add('open'); }
-  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function chargerAnnee(annee) {
+  anneeActive = annee;
+  const c = campagnes[annee];
+  totalCalCampagne = c.total || 0;
+  nomCaserne = c.caserne || '';
+  tournees  = c.tournees  || [];
+  paiements = c.paiements || [];
+  document.querySelector('.badge-annee').textContent = (nomCaserne ? nomCaserne + ' · ' : '') + 'Campagne ' + annee;
+}
 
-  function renderEquipes() {
-    const c = document.getElementById('equipes-container');
-    if (equipes.length === 0) {
-      c.innerHTML = '<div style="color:var(--texte-dim);font-size:13px;padding:20px">Aucune équipe. Créez votre première équipe !</div>';
-      return;
-    }
-    c.innerHTML = equipes.map(e => `
-      <div class="equipe-card">
-        <div class="equipe-header">
-          <div class="equipe-nom">🔥 ${e.nom}</div>
-          <button onclick="supprimerEquipe('${e.id}')" style="background:none;border:none;color:var(--texte-dim);cursor:pointer;font-size:16px">🗑</button>
+function onAnneeChange(val) {
+  const annee = parseInt(val);
+  if (!annee || annee < 2000) return;
+  anneeActive = annee;
+  if (campagnes[annee]) {
+    document.getElementById('setup-total-cal').value = campagnes[annee].total || '';
+    document.getElementById('caserne-input').value = campagnes[annee].caserne || '';
+    document.getElementById('reprendre-wrap').style.display = 'block';
+  } else {
+    document.getElementById('setup-total-cal').value = '';
+    document.getElementById('reprendre-wrap').style.display = 'none';
+  }
+}
+
+function renderHistoriqueCampagnes() {
+  const el = document.getElementById('historique-campagnes');
+  if (!el) return;
+  const annees = Object.keys(campagnes).sort((a,b) => b - a);
+  if (annees.length === 0) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--texte-dim);font-style:italic">Aucune campagne enregistrée</div>';
+    return;
+  }
+  el.innerHTML = annees.map(a => {
+    const c = campagnes[a];
+    const vendus = (c.tournees||[]).reduce((s,t)=>s+parseInt(t.calendriers||0), 0);
+    const recette = (c.tournees||[]).reduce((s,t)=>s+parseInt(t.montant||0), 0);
+    const pct = c.total > 0 ? Math.round(vendus/c.total*100) : 0;
+    const isActive = parseInt(a) === anneeActive;
+    return `
+    <div onclick="ouvrirCampagne(${a})" style="display:flex;align-items:center;justify-content:space-between;
+      padding:14px 16px;border-radius:10px;margin-bottom:8px;cursor:pointer;
+      background:${isActive?'var(--rouge-clair)':'var(--fond-alt)'};
+      border:1px solid ${isActive?'var(--rouge)':'transparent'};transition:all 0.2s">
+      <div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;color:${isActive?'var(--rouge)':'var(--texte)'}">
+          ${isActive?'▶ ':''}${c.caserne ? c.caserne + ' — ' : ''}Campagne ${a}
         </div>
-        <div style="font-size:12px;color:var(--texte-dim);margin-bottom:12px">${e.p1} & ${e.p2||''}</div>
+        <div style="font-size:11px;color:var(--texte-dim);margin-top:2px">${vendus} vendus · ${recette.toLocaleString('fr-FR')}€ · ${(c.tournees||[]).length} tournée(s)</div>
       </div>
-    `).join('');
-  }
-
-  async function ajouterEquipe() {
-    const nom = document.getElementById('eq-nom').value.trim();
-    const p1 = document.getElementById('eq-p1').value.trim();
-    const p2 = document.getElementById('eq-p2').value.trim();
-    if(!nom||!p1) return alert('Remplissez au moins le nom et le pompier 1');
-    try {
-      await window.fsAddDoc(window.fsCollection(window.db, "equipes"), { nom, p1, p2 });
-      closeModal('modal-equipe');
-      document.getElementById('eq-nom').value='';
-      document.getElementById('eq-p1').value='';
-      document.getElementById('eq-p2').value='';
-    } catch(e) { alert('Erreur Firebase : ' + e.message); }
-  }
-
-  async function supprimerEquipe(id) {
-    if (!confirm('Supprimer cette équipe ?')) return;
-    try { await window.fsDeleteDoc(window.fsDoc(window.db, "equipes", id)); }
-    catch(e) { alert('Erreur : ' + e.message); }
-  }
-
-  function renderTournees() {
-    const c = document.getElementById('tournees-container');
-    if (tournees.length === 0) {
-      c.innerHTML = '<div style="color:var(--texte-dim);font-size:13px;padding:20px">Aucune tournée créée.</div>';
-      return;
-    }
-    c.innerHTML = tournees.map(t => `
-      <div class="equipe-card">
-        <div class="equipe-header">
-          <div class="equipe-nom">${t.nom}</div>
-          <div class="equipe-code">${t.code}</div>
-        </div>
-        <div style="font-size:12px;color:var(--texte-dim)">${t.equipe}</div>
+      <div style="text-align:right">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--or)">${pct}%</div>
+        <div style="font-size:10px;color:var(--texte-dim)">${c.total} cal.</div>
       </div>
-    `).join('');
+    </div>`;
+  }).join('');
+}
+
+function ouvrirCampagne(annee) {
+  chargerAnnee(annee);
+  afficherDashboard();
+}
+
+function reprendreCampagne() {
+  if (campagnes[anneeActive]) {
+    chargerAnnee(anneeActive);
+    afficherDashboard();
+  }
+}
+
+function allerSetup() {
+  sauvegarderCampagnes();
+  document.getElementById('dashboard-main').style.display = 'none';
+  document.getElementById('setup-screen').style.display   = 'block';
+  const inp = document.getElementById('annee-input');
+  if (inp) inp.value = '';
+  document.getElementById('caserne-input').value = '';
+  document.getElementById('reprendre-wrap').style.display = 'none';
+  renderHistoriqueCampagnes();
+}
+
+function afficherDashboard() {
+  document.getElementById('setup-screen').style.display   = 'none';
+  document.getElementById('dashboard-main').style.display = 'block';
+  document.querySelector('.badge-annee').textContent = (nomCaserne ? nomCaserne + ' · ' : '') + 'Campagne ' + anneeActive;
+  renderTournees();
+  updateDashboard();
+  updatePaiements();
+}
+
+function validerSetup() {
+  const caserne = document.getElementById('caserne-input').value.trim();
+  const annee = parseInt(document.getElementById('annee-input').value);
+  const val   = parseInt(document.getElementById('setup-total-cal').value);
+  if (!caserne) return alert('Veuillez entrer le nom de la caserne');
+  if (!annee || annee < 2000) return alert('Veuillez entrer une année valide');
+  if (!val || val < 1) return alert('Veuillez entrer un nombre de calendriers valide');
+
+  anneeActive = annee;
+  totalCalCampagne = val;
+  nomCaserne = caserne;
+  if (!campagnes[anneeActive]) {
+    tournees = []; paiements = [];
+  } else {
+    chargerAnnee(anneeActive);
+    totalCalCampagne = val;
+    nomCaserne = caserne;
+  }
+  sauvegarderCampagnes();
+  afficherDashboard();
+}
+
+function sauvegarderConfig() {
+  const val = parseInt(document.getElementById('config-total-cal').value);
+  if (!val || val < 1) return alert('Veuillez entrer un nombre valide');
+  totalCalCampagne = val;
+  const caserne = document.getElementById('config-caserne').value.trim();
+  if (caserne) nomCaserne = caserne;
+  sauvegarderCampagnes();
+  document.querySelector('.badge-annee').textContent = (nomCaserne ? nomCaserne + ' · ' : '') + 'Campagne ' + anneeActive;
+  closeModal('modal-config');
+  updateDashboard();
+}
+
+// ============================================================
+// SYNC FIRESTORE TEMPS RÉEL
+// ============================================================
+function fbPush() {
+  if (!window.fbReady || fbSyncing) return;
+  try {
+    const ref = window.fbDoc(window.fbDb, 'calendrierPompiers', 'campagnes');
+    window.fbSetDoc(ref, { data: campagnes, updatedAt: Date.now() }).catch(err => {
+      console.warn('Firestore push error', err);
+    });
+  } catch(e) { console.warn('fbPush error', e); }
+}
+
+function fbStartSync(onFirstData) {
+  if (!window.fbReady) {
+    window.addEventListener('firebase-ready', () => fbStartSync(onFirstData), { once: true });
+    return;
+  }
+  try {
+    const ref = window.fbDoc(window.fbDb, 'calendrierPompiers', 'campagnes');
+    let first = true;
+    fbUnsubscribe = window.fbOnSnapshot(ref, (snap) => {
+      if (!snap.exists()) {
+        if (Object.keys(campagnes).length > 0) fbPush();
+        if (first) { first = false; if (onFirstData) onFirstData(); }
+        return;
+      }
+      const remote = snap.data().data || {};
+      fbSyncing = true;
+      campagnes = remote;
+      localStorage.setItem('cp_campagnes', JSON.stringify(campagnes));
+
+      if (anneeActive && campagnes[anneeActive]) {
+        const c = campagnes[anneeActive];
+        totalCalCampagne = c.total || 0;
+        nomCaserne = c.caserne || '';
+        tournees  = c.tournees  || [];
+        paiements = c.paiements || [];
+      }
+
+      try {
+        if (document.getElementById('dashboard-main') && document.getElementById('dashboard-main').style.display !== 'none') {
+          renderTournees();
+          updateDashboard();
+          updatePaiements();
+        }
+        if (document.getElementById('binome-tournee') && document.getElementById('binome-tournee').style.display !== 'none') {
+          afficherTourneeBinome();
+        }
+      } catch(e) {}
+
+      fbSyncing = false;
+      if (first) { first = false; if (onFirstData) onFirstData(); }
+    }, (err) => {
+      console.warn('Firestore onSnapshot error', err);
+      if (first) { first = false; if (onFirstData) onFirstData(); }
+    });
+  } catch(e) {
+    console.warn('fbStartSync error', e);
+    if (onFirstData) onFirstData();
+  }
+}
+
+// ============================================================
+// NAVIGATION / MODALS
+// ============================================================
+function showVue(nom) {
+  document.querySelectorAll('.vue').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('vue-'+nom).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if(nom==='tournees') renderTournees();
+  if(nom==='paiements') updatePaiements();
+  if(nom==='dashboard') updateDashboard();
+}
+
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+  if (id === 'modal-config') {
+    document.getElementById('config-caserne').value = nomCaserne || '';
+    document.getElementById('config-total-cal').value = totalCalCampagne || '';
+  }
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  if (id === 'modal-tournee') resetForm();
+}
+
+function resetForm() {
+  document.getElementById('form-step-1').style.display='block';
+  document.getElementById('form-step-2').style.display='none';
+  document.getElementById('modal-tournee-inner').classList.remove('modal-large');
+  document.getElementById('t-numero').value='';
+  document.getElementById('t-chef').value='';
+  document.getElementById('t-binome').value='';
+  document.getElementById('t-calendriers').value='';
+  pointsPolygone = [];
+  adresses = [];
+  isDrawing = false;
+  markersPolygone = [];
+  lignePolygone = null;
+  polygoneValide = false;
+  dessinSauvegarde = null;
+  currentTourneeData = {};
+}
+
+// ============================================================
+// CRÉATION DE TOURNÉE (formulaire + carte)
+// ============================================================
+function validerFormulaireTournee() {
+  const numero = document.getElementById('t-numero').value;
+  const chef = document.getElementById('t-chef').value;
+  const binome = document.getElementById('t-binome').value;
+  const calendriers = document.getElementById('t-calendriers').value;
+
+  if(!numero || !chef || !binome || !calendriers) {
+    alert('❌ Remplissez tous les champs !');
+    return;
   }
 
-  async function creerTournee() {
-    const nom = document.getElementById('t-nom').value.trim() || 'Tournée sans nom';
-    const equipe = document.getElementById('t-equipe').value;
-    const code = 'CODE' + Math.random().toString(36).substr(2, 5).toUpperCase();
-    try {
-      await window.fsAddDoc(window.fsCollection(window.db, "tournees"), { nom, equipe, code });
-      closeModal('modal-tournee');
-      document.getElementById('t-nom').value='';
-    } catch(e) { alert('Erreur : ' + e.message); }
+  // Conserver le code si on revient en arrière (sinon générer un nouveau)
+  if (!currentTourneeData.code) {
+    currentTourneeData = { numero, chef, binome, calendriers, code: genererCode() };
+  } else {
+    currentTourneeData = { ...currentTourneeData, numero, chef, binome, calendriers };
   }
 
-  function renderPaiements() {
-    const tbody = document.getElementById('paiements-table');
-    const modeLabel = { espece:'💵 Espèces', cheque:'🏦 Chèque', virement:'📲 Virement' };
-    if (paiements.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--texte-dim);padding:20px">Aucun paiement enregistré</td></tr>';
-      return;
+  document.getElementById('form-step-1').style.display='none';
+  document.getElementById('form-step-2').style.display='block';
+  document.getElementById('modal-tournee-inner').classList.add('modal-large');
+
+  setTimeout(() => {
+    initMap();
+    // Restaurer le dessin sauvegardé si présent
+    if (dessinSauvegarde && dessinSauvegarde.points.length > 0) {
+      dessinSauvegarde.points.forEach(p => ajouterPoint(L.latLng(p.lat, p.lng)));
+      adresses = dessinSauvegarde.adresses || [];
+      if (dessinSauvegarde.polygoneValide) {
+        terminerPolygone();
+        if (adresses.length > 0) {
+          document.getElementById('btn-finaliser').disabled = false;
+          // Réafficher les marqueurs d'adresses
+          adresses.forEach(a => {
+L.marker([a.lat, a.lon], { icon: L.divIcon({
+              className: '',
+              html: '<div style="position:relative;width:20px;height:28px"><svg viewBox="0 0 20 28" width="20" height="28" xmlns="http://www.w3.org/2000/svg"><line x1="3" y1="0" x2="3" y2="28" stroke="#16A34A" stroke-width="2"/><polygon points="3,2 18,7 3,12" fill="#16A34A"/></svg></div>',
+              iconSize: [20, 28], iconAnchor: [3, 28]
+            })}).addTo(map).bindPopup(`<strong>${a.numero} ${a.rue}</strong><br>${a.codepostal} ${a.ville}`);
+          });
+          updateStatusMap('success', `✅ Tracé restauré ! ${adresses.length} adresses déjà chargées.`);
+        } else {
+          updateStatusMap('info', '↩ Tracé restauré. Vous pouvez ajuster les points ou recharger les adresses.');
+        }
+      }
+      dessinSauvegarde = null;
     }
-    tbody.innerHTML = paiements.map(p=>`
+  }, 100);
+}
+
+function genererCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for(let i=0;i<6;i++) code += chars[Math.floor(Math.random()*chars.length)];
+  return code;
+}
+
+function initMap() {
+  if(map) map.remove();
+  map = L.map('map', { preferCanvas: true }).setView([44.8917, 4.8886], 17);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 20,
+    crossOrigin: true
+  }).addTo(map);
+
+  map.on('click', onMapClick);
+
+  // Double invalidateSize pour forcer le rendu dans la modal
+  setTimeout(() => { if (map) { map.invalidateSize(); } }, 100);
+  setTimeout(() => { if (map) { map.invalidateSize(); } }, 500);
+}
+
+function onMapClick(e) {
+  if (polygoneValide) return; // on ne peut plus ajouter de point une fois le polygone validé, seulement le glisser
+
+  if(!isDrawing && pointsPolygone.length===0) {
+    isDrawing = true;
+    pointsPolygone = [];
+    updateStatusMap('info', '✏️ Dessin en cours...');
+  }
+
+  if(isDrawing) {
+    ajouterPoint(e.latlng);
+  }
+}
+
+function ajouterPoint(latlng) {
+  pointsPolygone.push(latlng);
+
+  const idx = pointsPolygone.length - 1;
+
+  const icone = L.divIcon({
+    className: 'point-polygone',
+    html: '<div style="width:18px;height:18px;background:#E8392D;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:grab"></div>',
+    iconSize: [18, 18],
+    iconAnchor: [9, 9]
+  });
+
+  const marker = L.marker(latlng, { icon: icone, draggable: true }).addTo(map);
+
+  marker.on('mousedown', function(ev) {
+    L.DomEvent.stopPropagation(ev);
+  });
+  marker.on('drag', function(ev) {
+    pointsPolygone[idx] = ev.target.getLatLng();
+    redessinerLigne();
+  });
+  marker.on('dragend', function(ev) {
+    pointsPolygone[idx] = ev.target.getLatLng();
+    redessinerLigne();
+  });
+
+  markersPolygone.push(marker);
+
+  redessinerLigne();
+
+  if(pointsPolygone.length >= 3) {
+    document.getElementById('btn-terminer').disabled = false;
+  }
+  document.getElementById('btn-annuler-point').disabled = pointsPolygone.length === 0;
+
+  updateStatusMap('info', `📍 ${pointsPolygone.length} point(s) ajouté(s). Minimum 3 points requis. Glissez un point pour ajuster.`);
+}
+
+function redessinerLigne() {
+  if (lignePolygone) { map.removeLayer(lignePolygone); lignePolygone = null; }
+  if (pointsPolygone.length < 2) return;
+
+  if (polygoneValide || pointsPolygone.length >= 3) {
+    // Une fois 3 points : on affiche en polygone fermé (zone)
+    lignePolygone = L.polygon(pointsPolygone, {
+      color: '#E8392D',
+      weight: 3,
+      opacity: 0.9,
+      fill: true,
+      fillColor: '#E8392D',
+      fillOpacity: 0.12
+    }).addTo(map);
+  } else {
+    // Moins de 3 points : simple ligne
+    lignePolygone = L.polyline(pointsPolygone, {
+      color: '#E8392D',
+      weight: 3,
+      opacity: 0.9
+    }).addTo(map);
+  }
+}
+
+function annulerDernierPoint() {
+  if (pointsPolygone.length === 0) return;
+
+  pointsPolygone.pop();
+  const dernierMarker = markersPolygone.pop();
+  if (dernierMarker) map.removeLayer(dernierMarker);
+
+  // Si polygone était validé, le remettre en mode dessin
+  if (polygoneValide) {
+    polygoneValide = false;
+    document.getElementById('btn-charger').disabled = true;
+    document.getElementById('btn-terminer').disabled = false;
+  }
+
+  redessinerLigne();
+
+  document.getElementById('btn-terminer').disabled = pointsPolygone.length < 3;
+  document.getElementById('btn-annuler-point').disabled = pointsPolygone.length === 0;
+
+  if (pointsPolygone.length === 0) {
+    isDrawing = false;
+    updateStatusMap('info', '');
+  } else {
+    updateStatusMap('info', `📍 ${pointsPolygone.length} point(s). Minimum 3 points requis.`);
+  }
+}
+
+function effacerToutDessin() {
+  if (pointsPolygone.length === 0 && adresses.length === 0) return;
+  if (!confirm('Effacer tout le tracé et recommencer le dessin ?')) return;
+
+  // Supprimer tous les marqueurs
+  markersPolygone.forEach(m => map.removeLayer(m));
+  markersPolygone = [];
+
+  // Supprimer la ligne/polygone
+  if (lignePolygone) { map.removeLayer(lignePolygone); lignePolygone = null; }
+
+  // Supprimer les marqueurs d'adresses vertes
+  map.eachLayer(layer => {
+    if (layer instanceof L.CircleMarker) map.removeLayer(layer);
+  });
+
+  pointsPolygone = [];
+  adresses = [];
+  isDrawing = false;
+  polygoneValide = false;
+
+  document.getElementById('btn-terminer').disabled = true;
+  document.getElementById('btn-annuler-point').disabled = true;
+  document.getElementById('btn-charger').disabled = true;
+  document.getElementById('btn-finaliser').disabled = true;
+
+  updateStatusMap('info', '🗑 Tracé effacé. Cliquez sur la carte pour recommencer.');
+}
+
+function terminerPolygone() {
+  if(pointsPolygone.length < 3) {
+    updateStatusMap('error', '❌ Au minimum 3 points pour créer un polygone !');
+    return;
+  }
+
+  isDrawing = false;
+  polygoneValide = true;
+
+  redessinerLigne();
+
+  document.getElementById('btn-terminer').disabled = true;
+  document.getElementById('btn-annuler-point').disabled = true;
+  document.getElementById('btn-charger').disabled = false;
+
+  updateStatusMap('success', `✅ Polygone finalisé ! ${pointsPolygone.length} points. Vous pouvez encore glisser les points pour ajuster avant de charger les adresses.`);
+}
+
+function calculerBbox() {
+  let minLat=90, maxLat=-90, minLon=180, maxLon=-180;
+  pointsPolygone.forEach(p => {
+    minLat = Math.min(minLat, p.lat);
+    maxLat = Math.max(maxLat, p.lat);
+    minLon = Math.min(minLon, p.lng);
+    maxLon = Math.max(maxLon, p.lng);
+  });
+  return { minLat, maxLat, minLon, maxLon };
+}
+
+async function chargerAdresses() {
+  if(pointsPolygone.length < 3) {
+    updateStatusMap('error', '❌ Veuillez d\'abord tracer un polygone !');
+    return;
+  }
+
+  updateStatusMap('info', '⏳ Détection de la commune...');
+  document.getElementById('btn-charger').disabled = true;
+
+  try {
+    const bbox = calculerBbox();
+    const centreLat = (bbox.minLat + bbox.maxLat) / 2;
+    const centreLon = (bbox.minLon + bbox.maxLon) / 2;
+
+    // Étape 1 : trouver la commune via geo.api.gouv.fr
+    updateStatusMap('info', '⏳ Détection de la commune...');
+    const geoResp = await fetch(
+      `https://geo.api.gouv.fr/communes?lat=${centreLat}&lon=${centreLon}&fields=code,nom,codesPostaux&format=json`
+    );
+    const communes = await geoResp.json();
+    if (!communes || communes.length === 0) throw new Error('Commune introuvable');
+    const commune = communes[0];
+    const codeCommune = commune.code;
+    const nomCommune = commune.nom;
+
+    updateStatusMap('info', `📍 Commune : ${nomCommune} (${codeCommune}). Chargement des adresses...`);
+
+    // Étape 2 : récupérer les adresses via API BAN avec plusieurs rues
+    // On utilise l'API reverse géocodage sur une grille de points dans le polygone
+    adresses = [];
+    const adressesDejaVues = new Set();
+
+    // Créer une grille de points dans le bbox et faire des reverse géocodage
+    const nbPoints = 8; // grille 8x8 = 64 points
+    const latStep = (bbox.maxLat - bbox.minLat) / nbPoints;
+    const lonStep = (bbox.maxLon - bbox.minLon) / nbPoints;
+
+    // Collecter tous les points de la grille dans le polygone
+    const pointsGrille = [];
+    for (let i = 0; i <= nbPoints; i++) {
+      for (let j = 0; j <= nbPoints; j++) {
+        const lat = bbox.minLat + i * latStep;
+        const lon = bbox.minLon + j * lonStep;
+        if (pointDansPolygone([lat, lon])) {
+          pointsGrille.push({ lat, lon });
+        }
+      }
+    }
+
+    // Également ajouter les adresses proches du périmètre
+    updateStatusMap('info', `📍 Recherche des adresses dans ${nomCommune}... (${pointsGrille.length} zones analysées)`);
+
+    // Utiliser l'API search avec le nom de commune pour toutes les rues
+    // Récupérer les rues uniques d'abord
+    const ruesResp = await fetch(
+      `https://api-adresse.data.gouv.fr/search/?q=&citycode=${codeCommune}&type=street&limit=100`
+    );
+    const ruesData = await ruesResp.json();
+    const rues = (ruesData.features || []).map(f => f.properties.name || f.properties.street).filter(Boolean);
+
+    updateStatusMap('info', `📍 ${rues.length} rues trouvées pour ${nomCommune}. Chargement des adresses...`);
+
+    // Pour chaque rue, récupérer les numéros
+    for (const rue of rues.slice(0, 50)) { // max 50 rues
+      try {
+        const url = `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(rue)}&citycode=${codeCommune}&limit=200`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        (data.features || []).forEach(f => {
+          const lon = f.geometry.coordinates[0];
+          const lat = f.geometry.coordinates[1];
+          const cle = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+          if (!adressesDejaVues.has(cle) && pointDansPolygone([lat, lon])) {
+            adressesDejaVues.add(cle);
+            const props = f.properties;
+            adresses.push({
+              numero: props.housenumber || '?',
+              rue: props.street || rue,
+              ville: props.city || nomCommune,
+              codepostal: props.postcode || '',
+              lat, lon
+            });
+L.marker([lat, lon], { icon: L.divIcon({
+              className: '',
+              html: '<div style="position:relative;width:20px;height:28px"><svg viewBox="0 0 20 28" width="20" height="28" xmlns="http://www.w3.org/2000/svg"><line x1="3" y1="0" x2="3" y2="28" stroke="#E8392D" stroke-width="2"/><polygon points="3,2 18,7 3,12" fill="#E8392D"/></svg></div>',
+              iconSize: [20, 28], iconAnchor: [3, 28]
+            })}).addTo(map).bindPopup(
+              `<strong>${props.housenumber || ''} ${props.street || rue}</strong><br>${props.postcode || ''} ${props.city || nomCommune}`
+            );
+          }
+        });
+      } catch(e) { /* ignorer les erreurs par rue */ }
+    }
+
+    if (adresses.length === 0) {
+      updateStatusMap('error', `⚠️ Aucune adresse trouvée dans ce secteur pour ${nomCommune}. Essayez d'élargir votre tracé.`);
+    } else {
+      updateStatusMap('success', `✅ ${adresses.length} adresses trouvées dans le secteur !`);
+    }
+    document.getElementById('btn-finaliser').disabled = false;
+    document.getElementById('btn-charger').disabled = false;
+
+  } catch(err) {
+    console.error(err);
+    updateStatusMap('error', `❌ Erreur : ${err.message}. Vérifiez votre connexion.`);
+    document.getElementById('btn-finaliser').disabled = false;
+    document.getElementById('btn-charger').disabled = false;
+  }
+}
+
+function pointDansPolygone(point) {
+  let inside = false;
+  for(let i=0, j=pointsPolygone.length-1; i<pointsPolygone.length; j=i++) {
+    const xi = pointsPolygone[i].lat, yi = pointsPolygone[i].lng;
+    const xj = pointsPolygone[j].lat, yj = pointsPolygone[j].lng;
+    const intersect = ((yi > point[1]) !== (yj > point[1])) && (point[0] < (xj-xi)*(point[1]-yi)/(yj-yi)+xi);
+    if(intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function updateStatusMap(type, message) {
+  const el = document.getElementById('status-map');
+  if(!message) { el.innerHTML=''; return; }
+  const className = type==='error' ? 'error' : type==='success' ? 'success' : 'info';
+  el.innerHTML = `<div class="${className}">${message}</div>`;
+}
+
+// Sauvegarde temporaire du dessin quand on revient en arrière
+let dessinSauvegarde = null;
+
+function retourFormulaire() {
+  // Sauvegarder le dessin actuel avant de revenir
+  if (pointsPolygone.length > 0) {
+    dessinSauvegarde = {
+      points: pointsPolygone.map(p => ({ lat: p.lat, lng: p.lng })),
+      polygoneValide,
+      adresses: [...adresses]
+    };
+  }
+  document.getElementById('form-step-1').style.display='block';
+  document.getElementById('form-step-2').style.display='none';
+  document.getElementById('modal-tournee-inner').classList.remove('modal-large');
+  if(map) map.remove();
+  pointsPolygone = [];
+  adresses = [];
+  isDrawing = false;
+  markersPolygone = [];
+  lignePolygone = null;
+  polygoneValide = false;
+}
+
+function finalisertournee() {
+  const adressesAvecStatut = adresses.map(a => ({
+    ...a, vendu: false, calendriers: 0, montant: 0, mode: ''
+  }));
+
+  const nom = `${currentTourneeData.chef} & ${currentTourneeData.binome}`;
+  tournees.push({
+    id: tournees.length + 1,
+    numero: currentTourneeData.numero,
+    chef: currentTourneeData.chef,
+    binome: currentTourneeData.binome,
+    nom: nom,
+    code: currentTourneeData.code,
+    calendriers: currentTourneeData.calendriers,
+    adresses: adressesAvecStatut,
+    nbAdresses: adressesAvecStatut.length,
+    montant: 0,
+    // Sauvegarde des points du polygone pour affichage sur carte binôme
+    pointsPolygone: pointsPolygone.map(p => ({ lat: p.lat, lng: p.lng }))
+  });
+
+  closeModal('modal-tournee');
+  renderTournees();
+  updateDashboard();
+  updatePaiements();
+  sauvegarderCampagnes();
+  alert(`✅ Tournée créée !\n\nCode d'accès binôme : ${currentTourneeData.code}\n\nÀ donner à ${currentTourneeData.chef} et ${currentTourneeData.binome} sur le lien mobile.`);
+}
+
+function renderTournees() {
+  const container = document.getElementById('tournees-list');
+  if (!container) return;
+  if(tournees.length === 0) {
+    container.innerHTML = '<div style="color: var(--texte-dim); text-align: center; padding: 40px 0;">Aucune tournée créée. Cliquez sur "Créer une tournée" pour commencer.</div>';
+    return;
+  }
+
+  container.innerHTML = tournees.map(t => {
+    const v = calculerVentesReelles(t);
+    const nbVendues = (t.adresses||[]).filter(a=>a.vendu).length;
+    return `
+    <div class="tournee-item" style="flex-direction:column;align-items:stretch">
+      <div class="tournee-header">
+        <div class="tournee-num" style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--rouge);min-width:auto">#${t.numero}</div>
+        <div class="tournee-nom">${t.chef} & ${t.binome}</div>
+        <div class="tournee-code-badge">${t.code}</div>
+        <button onclick="copierLienBinome('${t.code}')" style="background:var(--rouge-clair);border:none;color:var(--rouge);border-radius:8px;padding:6px 12px;font-size:11px;cursor:pointer;font-weight:700;white-space:nowrap">🔗 Copier lien binôme</button>
+      </div>
+      <div class="tournee-info">
+        📅 ${v.cal} / ${t.calendriers} calendriers vendus | 📍 ${nbVendues} / ${t.nbAdresses} adresses faites | 💰 ${v.montant.toLocaleString('fr-FR')}€ encaissés
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function copierLienBinome(code) {
+  const url = window.location.origin + window.location.pathname + '?binome=1';
+  const texte = `Lien : ${url}\nCode tournée : ${code}`;
+  navigator.clipboard.writeText(texte).then(() => {
+    alert('✅ Lien et code copiés !\n\n' + texte);
+  }).catch(() => {
+    alert('Lien : ' + url + '\nCode : ' + code);
+  });
+}
+
+function calculerVentesReelles(t) {
+  let cal = 0, montant = 0;
+  (t.adresses || []).forEach(a => {
+    if (a.vendu) { cal += parseInt(a.calendriers || 0); montant += parseFloat(a.montant || 0); }
+  });
+  return { cal, montant };
+}
+
+function updateDashboard() {
+  let totalVendus = 0, totalRecette = 0;
+  tournees.forEach(t => {
+    const v = calculerVentesReelles(t);
+    totalVendus += v.cal;
+    totalRecette += v.montant;
+  });
+  const totalAdresses = tournees.reduce((s, t) => s + t.nbAdresses, 0);
+  const restants = Math.max(0, totalCalCampagne - totalVendus);
+
+  set('stat-vendus', totalVendus);
+  set('stat-vendus-sub', 'sur ' + totalCalCampagne + ' imprimés');
+  set('stat-restants', restants);
+  set('stat-restants-sub', 'à distribuer (' + totalCalCampagne + ' - ' + totalVendus + ')');
+  set('stat-recette', totalRecette.toLocaleString('fr-FR') + '€');
+  set('stat-recette-sub', 'Objectif : ' + (totalCalCampagne * 8) + '€');
+  set('stat-tournees', tournees.length);
+  set('stat-adresses', totalAdresses);
+  set('stat-total', totalCalCampagne);
+  set('badge-total-cal', totalCalCampagne.toLocaleString('fr-FR'));
+
+  refreshChartTournees();
+}
+
+function set(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+function updatePaiements() {
+  let especes = 0, cheques = 0, virements = 0;
+  const lignes = [];
+
+  tournees.forEach(t => {
+    (t.adresses || []).forEach(a => {
+      if (a.vendu) {
+        const m = parseFloat(a.montant || 0);
+        if (a.mode === 'espece') especes += m;
+        else if (a.mode === 'cheque') cheques += m;
+        else if (a.mode === 'virement') virements += m;
+        lignes.push({
+          tournee: t.numero, chef: t.chef, binome: t.binome,
+          adresse: (a.numero||'') + ' ' + (a.rue||''),
+          calendriers: a.calendriers, montant: m, mode: a.mode
+        });
+      }
+    });
+  });
+
+  const totalRecette = especes + cheques + virements;
+
+  set('pay-esp', especes.toLocaleString('fr-FR') + '€');
+  set('pay-che', cheques.toLocaleString('fr-FR') + '€');
+  set('pay-vir', virements.toLocaleString('fr-FR') + '€');
+
+  set('esp-total', especes.toLocaleString('fr-FR') + '€');
+  set('che-total', cheques.toLocaleString('fr-FR') + '€');
+  set('vir-total', virements.toLocaleString('fr-FR') + '€');
+
+  const espBar = document.getElementById('esp-bar');
+  const cheBar = document.getElementById('che-bar');
+  const virBar = document.getElementById('vir-bar');
+  if (espBar) espBar.style.width = totalRecette > 0 ? (especes/totalRecette*100) + '%' : '0%';
+  if (cheBar) cheBar.style.width = totalRecette > 0 ? (cheques/totalRecette*100) + '%' : '0%';
+  if (virBar) virBar.style.width = totalRecette > 0 ? (virements/totalRecette*100) + '%' : '0%';
+
+  const modeLabel = { espece: '💵 Espèces', cheque: '🏦 Chèque', virement: '📲 Virement' };
+  const tbody = document.getElementById('paiements-table');
+  if (tbody) {
+    tbody.innerHTML = lignes.length === 0
+      ? '<tr><td colspan="5" style="text-align:center;color:var(--texte-dim);padding:20px">Aucune vente enregistrée pour le moment</td></tr>'
+      : lignes.slice().reverse().map(l => `
       <tr>
-        <td><span style="font-family:'JetBrains Mono',monospace;color:var(--texte-dim)">${p.heure}</span></td>
-        <td>${p.equipe}</td>
-        <td>${p.adresse}</td>
-        <td style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--or)">${p.qty}</td>
-        <td style="font-family:'JetBrains Mono',monospace;color:var(--vert)">${p.montant}€</td>
-        <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(46,204,113,0.15);color:var(--vert)">${modeLabel[p.mode]||p.mode}</span></td>
+        <td>#${l.tournee} — ${l.adresse}</td>
+        <td>${l.chef}</td>
+        <td>${l.binome}</td>
+        <td style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--or)">${l.calendriers}</td>
+        <td style="font-family:'JetBrains Mono',monospace;color:var(--vert)">${l.montant}€ <span style="font-size:10px;color:var(--texte-dim)">${modeLabel[l.mode]||''}</span></td>
       </tr>
     `).join('');
   }
+}
 
-  window.onload = () => {
-    renderEquipes();
-    renderTournees();
-    renderPaiements();
-  };
+// ============================================================
+// GRAPHIQUE
+// ============================================================
+let chartTourneesInstance = null;
+function refreshChartTournees() {
+  const ctx = document.getElementById('chartTournees');
+  if (!ctx) return;
+  if (chartTourneesInstance) chartTourneesInstance.destroy();
+  chartTourneesInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: tournees.map(t => '#' + t.numero + ' ' + t.chef),
+      datasets: [{
+        label: 'Calendriers vendus',
+        data: tournees.map(t => parseInt(t.calendriers||0)),
+        backgroundColor: tournees.map((_,i)=>i%2===0?'rgba(232,57,45,0.8)':'rgba(245,158,11,0.8)'),
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#78716C' }, grid: { display: false } },
+        y: { ticks: { color: '#78716C' }, grid: { color: 'rgba(0,0,0,0.05)' } }
+      }
+    }
+  });
+}
+
+// ============================================================
+// EXPORT EXCEL
+// ============================================================
+function exporterExcel() {
+  if (typeof XLSX === 'undefined') { alert('Erreur : librairie Excel non chargée'); return; }
+
+  const wb = XLSX.utils.book_new();
+  const totalVendus = tournees.reduce((s,t)=>s+parseInt(t.calendriers||0), 0);
+  const totalRecette = tournees.reduce((s,t)=>s+parseInt(t.montant||0), 0);
+  const totalAdresses = tournees.reduce((s,t)=>s+t.nbAdresses, 0);
+
+  // Feuille 1 : Résumé
+  const wsGlobal = XLSX.utils.aoa_to_sheet([
+    ['RÉSULTATS CAMPAGNE ' + anneeActive + (nomCaserne ? ' — ' + nomCaserne : '')],
+    [],
+    ['CALENDRIERS', ''],
+    ['Total imprimés',        totalCalCampagne],
+    ['Vendus / distribués',   totalVendus],
+    ['Restants en stock',     Math.max(0, totalCalCampagne - totalVendus)],
+    ['Taux de vente',         totalCalCampagne > 0 ? Math.round(totalVendus/totalCalCampagne*100)+'%' : '0%'],
+    [],
+    ['RECETTES', ''],
+    ['Total recette',         totalRecette + ' €'],
+    ['Objectif',              (totalCalCampagne * 8) + ' €'],
+    [],
+    ['TOURNÉES', ''],
+    ['Nombre de tournées',    tournees.length],
+    ['Total adresses',        totalAdresses],
+  ]);
+  wsGlobal['!cols'] = [{ wch: 28 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, wsGlobal, '📊 Résumé global');
+
+  // Feuille 2 : Détail par tournée
+  const rowsTournees = [
+    ['Numéro', 'Chef', 'Binôme', 'Code', 'Calendriers', 'Adresses', 'Montant (€)'],
+  ];
+  tournees.forEach(t => {
+    rowsTournees.push([t.numero, t.chef, t.binome, t.code, t.calendriers, t.nbAdresses, t.montant]);
+  });
+  rowsTournees.push([]);
+  rowsTournees.push(['TOTAL', '', '', '', totalVendus, totalAdresses, totalRecette]);
+  const wsTournees = XLSX.utils.aoa_to_sheet(rowsTournees);
+  wsTournees['!cols'] = [{ wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, wsTournees, '🗺️ Tournées');
+
+  // Feuille 3 : Adresses détaillées
+  const rowsAdresses = [['Tournée', 'Chef', 'Numéro', 'Rue', 'Ville', 'Code postal']];
+  tournees.forEach(t => {
+    (t.adresses||[]).forEach(a => {
+      rowsAdresses.push(['#'+t.numero, t.chef, a.numero, a.rue, a.ville, a.codepostal]);
+    });
+  });
+  const wsAdresses = XLSX.utils.aoa_to_sheet(rowsAdresses);
+  wsAdresses['!cols'] = [{ wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 26 }, { wch: 18 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, wsAdresses, '📍 Adresses');
+
+  const nomFichier = 'CalendrierPompiers_' + (nomCaserne ? nomCaserne.replace(/[^a-zA-Z0-9]/g,'_') + '_' : '') + anneeActive + '.xlsx';
+  XLSX.writeFile(wb, nomFichier);
+}
+
+// ============================================================
+// INTERFACE BINÔME MOBILE
+// ============================================================
+let binomeAnneeActive = null;
+let binomeTourneeId = null;
+let binomeAdresseEnCours = null;
+let binomeModeChoisi = null;
+
+function connexionBinome() {
+  const code = document.getElementById('binome-code-input').value.trim().toUpperCase();
+  const errEl = document.getElementById('binome-login-error');
+  errEl.innerHTML = '';
+
+  if (!code) {
+    errEl.innerHTML = '<div class="error">Veuillez entrer un code</div>';
+    return;
+  }
+
+  if (!connecterAvecCode(code)) {
+    errEl.innerHTML = '<div class="error">❌ Code invalide. Vérifiez auprès du bureau.</div>';
+  }
+}
+
+function connecterAvecCode(code) {
+  let trouve = null, anneeTrouvee = null;
+  Object.keys(campagnes).forEach(annee => {
+    (campagnes[annee].tournees || []).forEach(t => {
+      if (t.code === code) { trouve = t; anneeTrouvee = annee; }
+    });
+  });
+
+  if (!trouve) return false;
+
+  binomeAnneeActive = anneeTrouvee;
+  binomeTourneeId = trouve.id;
+
+  // Mémoriser la session sur ce téléphone
+  localStorage.setItem('binome_code', code);
+  localStorage.setItem('binome_annee', anneeTrouvee);
+  localStorage.setItem('binome_id', trouve.id);
+
+  document.getElementById('binome-login').style.display = 'none';
+  document.getElementById('binome-tournee').style.display = 'block';
+  afficherTourneeBinome();
+  return true;
+}
+
+function deconnexionBinome() {
+  // Confirmer avant de déconnecter
+  if (!confirm('Se déconnecter ? Vous devrez retaper votre code la prochaine fois.')) return;
+
+  binomeAnneeActive = null;
+  binomeTourneeId = null;
+  if (mapBinome) { mapBinome.remove(); mapBinome = null; }
+  if (gpsWatchId) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+
+  // Effacer la session mémorisée
+  localStorage.removeItem('binome_code');
+  localStorage.removeItem('binome_annee');
+  localStorage.removeItem('binome_id');
+
+  document.getElementById('binome-tournee').style.display = 'none';
+  document.getElementById('binome-login').style.display = 'flex';
+  document.getElementById('binome-code-input').value = '';
+  switchVueBinome('liste');
+}
+
+function getTourneeBinome() {
+  if (!binomeAnneeActive || !campagnes[binomeAnneeActive]) return null;
+  return (campagnes[binomeAnneeActive].tournees || []).find(t => t.id === binomeTourneeId);
+}
+
+function afficherTourneeBinome() {
+  const t = getTourneeBinome();
+  if (!t) return;
+
+  document.getElementById('binome-titre').textContent = `Tournée #${t.numero}`;
+  document.getElementById('binome-sous-titre').textContent = `${t.chef} & ${t.binome}`;
+
+  const v = calculerVentesReellesFromAdresses(t.adresses || []);
+  const nbFaites = (t.adresses||[]).filter(a=>a.vendu).length;
+
+  document.getElementById('binome-stat-cal').textContent = v.cal;
+  document.getElementById('binome-stat-montant').textContent = v.montant.toLocaleString('fr-FR') + '€';
+  document.getElementById('binome-stat-adresses').textContent = nbFaites + '/' + (t.adresses||[]).length;
+
+  renderAdressesBinome(t);
+}
+
+function calculerVentesReellesFromAdresses(adressesList) {
+  let cal = 0, montant = 0;
+  (adressesList || []).forEach(a => {
+    if (a.vendu) { cal += parseInt(a.calendriers || 0); montant += parseFloat(a.montant || 0); }
+  });
+  return { cal, montant };
+}
+
+function renderAdressesBinome(t) {
+  const container = document.getElementById('binome-adresses-liste');
+  if (!t.adresses || t.adresses.length === 0) {
+    container.innerHTML = '<div style="text-align:center;color:var(--texte-dim);padding:40px 0">Aucune adresse dans cette tournée.</div>';
+    return;
+  }
+
+  const modeIcon = { espece: '💵', cheque: '🏦', virement: '📲' };
+
+  container.innerHTML = t.adresses.map((a, idx) => `
+    <div onclick="ouvrirVenteBinome(${idx})" style="background:var(--blanc);border-radius:14px;padding:16px;margin-bottom:10px;
+      border:1.5px solid ${a.vendu ? 'var(--vert)' : 'var(--gris-clair)'};cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:14px;font-weight:600;color:var(--texte)">${a.numero || ''} ${a.rue || 'Adresse'}</div>
+        <div style="font-size:11px;color:var(--texte-dim);margin-top:2px">${a.ville || ''} ${a.codepostal || ''}</div>
+        ${a.vendu ? `<div style="font-size:11px;color:var(--vert);margin-top:6px;font-weight:600">${modeIcon[a.mode]||''} ${a.calendriers} cal. · ${a.montant}€</div>` : ''}
+      </div>
+      <div style="font-size:24px">${a.vendu ? '✅' : '⬜'}</div>
+    </div>
+  `).join('');
+}
+
+function ouvrirVenteBinome(idx) {
+  const t = getTourneeBinome();
+  if (!t) return;
+  binomeAdresseEnCours = idx;
+  const a = t.adresses[idx];
+
+  document.getElementById('vente-adresse-label').textContent = (a.numero||'') + ' ' + (a.rue||'') + ', ' + (a.ville||'');
+  document.getElementById('vente-calendriers').value = a.vendu ? a.calendriers : 1;
+  document.getElementById('vente-montant').value = a.vendu ? a.montant : '';
+  binomeModeChoisi = a.vendu ? a.mode : null;
+
+  document.querySelectorAll('.mode-paiement-btn').forEach(btn => {
+    const isActive = btn.dataset.mode === binomeModeChoisi;
+    btn.style.borderColor = isActive ? 'var(--rouge)' : 'var(--gris-clair)';
+    btn.style.background = isActive ? 'var(--rouge-clair)' : 'var(--blanc)';
+  });
+
+  openModal('modal-vente-binome');
+}
+
+function choisirModePaiement(mode) {
+  binomeModeChoisi = mode;
+  document.querySelectorAll('.mode-paiement-btn').forEach(btn => {
+    const isActive = btn.dataset.mode === mode;
+    btn.style.borderColor = isActive ? 'var(--rouge)' : 'var(--gris-clair)';
+    btn.style.background = isActive ? 'var(--rouge-clair)' : 'var(--blanc)';
+  });
+}
+
+function confirmerVenteBinome() {
+  const cal = parseInt(document.getElementById('vente-calendriers').value);
+  const montant = parseFloat(document.getElementById('vente-montant').value);
+
+  if (!cal || cal < 1) return alert('Veuillez indiquer le nombre de calendriers');
+  if (montant === null || isNaN(montant) || montant < 0) return alert('Veuillez indiquer le montant reçu');
+  if (!binomeModeChoisi) return alert('Veuillez choisir un mode de paiement');
+
+  const c = campagnes[binomeAnneeActive];
+  const t = (c.tournees || []).find(tr => tr.id === binomeTourneeId);
+  if (!t) return;
+
+  t.adresses[binomeAdresseEnCours].vendu = true;
+  t.adresses[binomeAdresseEnCours].calendriers = cal;
+  t.adresses[binomeAdresseEnCours].montant = montant;
+  t.adresses[binomeAdresseEnCours].mode = binomeModeChoisi;
+
+  localStorage.setItem('cp_campagnes', JSON.stringify(campagnes));
+  fbPush();
+
+  closeModal('modal-vente-binome');
+  afficherTourneeBinome();
+
+  // Rafraîchir les marqueurs sur la carte si elle est ouverte
+  if (vueBinomeActive === 'carte' && mapBinome) {
+    rafraichirMarqueursAdresses(t);
+  }
+}
+
+function checkModeBinome() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('binome') === '1') {
+    document.getElementById('app-binome').style.display = 'block';
+    document.querySelector('.header').style.display = 'none';
+    document.getElementById('vue-dashboard').style.display = 'none';
+    document.getElementById('vue-tournees').style.display = 'none';
+    document.getElementById('vue-paiements').style.display = 'none';
+
+    // Restaurer la session si elle existe
+    const codeSauvegarde = localStorage.getItem('binome_code');
+    if (codeSauvegarde) {
+      // Attendre que les campagnes soient chargées depuis Firebase avant de reconnecter
+      const essayerReconnexion = () => {
+        if (connecterAvecCode(codeSauvegarde)) {
+          // Session restaurée silencieusement !
+        } else {
+          // Le code n'est plus valide (tournée supprimée ?)
+          localStorage.removeItem('binome_code');
+          localStorage.removeItem('binome_annee');
+          localStorage.removeItem('binome_id');
+        }
+      };
+      // On attend un peu que Firebase charge les données
+      setTimeout(essayerReconnexion, 1500);
+    }
+
+    return true;
+  }
+  return false;
+}
+
+// ============================================================
+// CARTE BINÔME + GPS
+// ============================================================
+let mapBinome = null;
+let gpsWatchId = null;
+let gpsMarker = null;
+let marqueursAdressesBinome = [];
+let vueBinomeActive = 'liste';
+
+function switchVueBinome(vue) {
+  vueBinomeActive = vue;
+  const vListe = document.getElementById('binome-adresses-liste');
+  const vCarte = document.getElementById('binome-vue-carte');
+  const btnListe = document.getElementById('btn-nav-liste');
+  const btnCarte = document.getElementById('btn-nav-carte');
+
+  if (vue === 'liste') {
+    if (vListe) vListe.style.display = 'block';
+    if (vCarte) vCarte.style.display = 'none';
+    if (btnListe) { btnListe.style.background = 'var(--rouge-clair)'; btnListe.style.color = 'var(--rouge)'; }
+    if (btnCarte) { btnCarte.style.background = 'transparent'; btnCarte.style.color = 'var(--texte-dim)'; }
+  } else {
+    if (vListe) vListe.style.display = 'none';
+    if (vCarte) vCarte.style.display = 'block';
+    if (btnListe) { btnListe.style.background = 'transparent'; btnListe.style.color = 'var(--texte-dim)'; }
+    if (btnCarte) { btnCarte.style.background = 'var(--rouge-clair)'; btnCarte.style.color = 'var(--rouge)'; }
+    initMapBinome();
+  }
+}
+
+function initMapBinome() {
+  const t = getTourneeBinome();
+  if (!t) return;
+
+  // Initialiser la carte si pas encore fait
+  if (!mapBinome) {
+    // Centre = première adresse ou centre du polygone
+    let lat = 44.8917, lon = 4.8886;
+    if (t.adresses && t.adresses.length > 0 && t.adresses[0].lat) {
+      lat = t.adresses[0].lat;
+      lon = t.adresses[0].lon;
+    }
+
+    mapBinome = L.map('map-binome').setView([lat, lon], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap', maxZoom: 20
+    }).addTo(mapBinome);
+
+    // Dessiner le contour du secteur si les points sont disponibles
+    if (t.pointsPolygone && t.pointsPolygone.length >= 3) {
+      L.polygon(t.pointsPolygone, {
+        color: '#E8392D', weight: 2, opacity: 0.6,
+        fill: true, fillColor: '#E8392D', fillOpacity: 0.05
+      }).addTo(mapBinome);
+    }
+
+    // Démarrer le GPS
+    demarrerGPS();
+  }
+
+  // Mettre à jour les marqueurs d'adresses
+  rafraichirMarqueursAdresses(t);
+
+  setTimeout(() => { if (mapBinome) mapBinome.invalidateSize(); }, 200);
+}
+
+function rafraichirMarqueursAdresses(t) {
+  marqueursAdressesBinome.forEach(m => mapBinome.removeLayer(m));
+  marqueursAdressesBinome = [];
+
+  (t.adresses || []).forEach((a, idx) => {
+    if (!a.lat || !a.lon) return;
+
+    const couleur = a.vendu ? '#16A34A' : '#E8392D';
+    const icone = L.divIcon({
+      className: '',
+      html: `<div style="position:relative;width:20px;height:28px">
+        <svg viewBox="0 0 20 28" width="20" height="28" xmlns="http://www.w3.org/2000/svg">
+          <line x1="3" y1="0" x2="3" y2="28" stroke="${couleur}" stroke-width="2"/>
+          <polygon points="3,2 18,7 3,12" fill="${couleur}"/>
+        </svg>
+      </div>`,
+      iconSize: [20, 28],
+      iconAnchor: [3, 28]
+    });
+
+    const marker = L.marker([a.lat, a.lon], { icon: icone })
+      .addTo(mapBinome)
+      .bindPopup(`<strong>${a.numero || ''} ${a.rue || ''}</strong><br>${a.vendu ? '✅ Vendu' : '⬜ À faire'}`);
+
+    marker.on('click', () => ouvrirVenteBinome(idx));
+    marqueursAdressesBinome.push(marker);
+  });
+}
+
+function demarrerGPS() {
+  if (!navigator.geolocation) return;
+  gpsWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      if (!mapBinome) return;
+
+      if (!gpsMarker) {
+        const iconeGPS = L.divIcon({
+          className: '',
+          html: `<div style="width:16px;height:16px;background:#3B82F6;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 4px rgba(59,130,246,0.3)"></div>`,
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        });
+        gpsMarker = L.marker([lat, lon], { icon: iconeGPS, zIndexOffset: 1000 }).addTo(mapBinome);
+        gpsMarker.bindPopup('📍 Ma position');
+      } else {
+        gpsMarker.setLatLng([lat, lon]);
+      }
+    },
+    err => console.warn('GPS non disponible:', err.message),
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+  );
+}
+
+function centrerSurMoi() {
+  if (gpsMarker && mapBinome) {
+    mapBinome.setView(gpsMarker.getLatLng(), 17);
+  } else {
+    alert('Position GPS non disponible. Activez la localisation sur votre téléphone.');
+  }
+}
+
+// ============================================================
+// INIT
+// ============================================================
+window.onload = () => {
+  anneeActive = new Date().getFullYear();
+  chargerCampagnes();
+
+  const isBinome = checkModeBinome();
+
+  fbStartSync(() => {
+    if (isBinome) {
+      // Rien à faire de spécial, les données sont déjà chargées via localStorage/Firestore
+      return;
+    }
+    if (campagnes[anneeActive]) {
+      chargerAnnee(anneeActive);
+      afficherDashboard();
+    } else {
+      document.getElementById('setup-screen').style.display   = 'block';
+      document.getElementById('dashboard-main').style.display = 'none';
+      renderHistoriqueCampagnes();
+    }
+  });
+
+  if (isBinome) return;
+
+  if (campagnes[anneeActive]) {
+    chargerAnnee(anneeActive);
+    afficherDashboard();
+  } else {
+    document.getElementById('setup-screen').style.display   = 'block';
+    document.getElementById('dashboard-main').style.display = 'none';
+    renderHistoriqueCampagnes();
+  }
+};
 </script>
 
 </body>
