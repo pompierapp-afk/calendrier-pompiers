@@ -1223,7 +1223,10 @@
 <div class="vue" id="vue-tournees">
   <div class="flex-between">
     <div class="section-title">🗺️ Gestion des Tournées</div>
-    <button class="btn btn-rouge" onclick="openModal('modal-tournee')">+ Créer une tournée</button>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-rouge" onclick="nouveauSecteur()">➕ Nouveau secteur</button>
+      <button class="btn btn-outline" onclick="renderTournees()">🔄 Actualiser</button>
+    </div>
   </div>
 
   <div id="tournees-container" class="card">
@@ -1506,6 +1509,20 @@ let polygoneFinal = null;
 let polygoneValide = false;
 let adresses = [];
 let currentTourneeData = {};
+
+function prochainNumeroSecteur() {
+  if (!tournees || tournees.length === 0) return 1;
+  const maxNum = Math.max(...tournees.map(t => parseInt(t.numero) || 0));
+  return maxNum + 1;
+}
+
+function nouveauSecteur() {
+  openModal('modal-tournee');
+  setTimeout(() => {
+    const champ = document.getElementById('t-numero');
+    if (champ && !champ.value) champ.value = prochainNumeroSecteur();
+  }, 200);
+}
 
 // ============================================================
 // CAMPAGNES – gestion multi-années (synchronisé Firestore)
@@ -2036,8 +2053,9 @@ async function chargerAdresses() {
     // ── Les 3 appels en parallèle ─────────────────────────────────
     const [resultBAN, resultOverpass, resultNominatim] = await Promise.allSettled([
 
-      // 1) BAN
-      fetch(`https://api-adresse.data.gouv.fr/search/?q=a&citycode=${codeCommune}&limit=1000&type=housenumber`)
+      // 1) BAN — adresses françaises fiables
+      // q=housenumber fonctionne mieux que q=a ou q=*
+      fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(nomCommune)}&citycode=${codeCommune}&limit=1000&type=housenumber`)
         .then(r => { if (!r.ok) throw new Error('BAN HTTP ' + r.status); return r.json(); })
         .then(data => {
           const pts = (data.features || []).map(f => ({
@@ -2053,8 +2071,8 @@ async function chargerAdresses() {
           return pts;
         }),
 
-      // 2) Overpass
-      fetch('https://overpass-api.de/api/interpreter', {
+      // 2) Overpass via proxy HTTPS public (évite le CORS)
+      fetch(`https://overpass.kumi.systems/api/interpreter`, {
         method: 'POST',
         body: `[out:json][timeout:20];(node["addr:housenumber"](poly:"${poly}");way["addr:housenumber"](poly:"${poly}"););out center;`,
         signal: AbortSignal.timeout(22000)
@@ -2532,6 +2550,17 @@ function calculerVentesReellesFromAdresses(adressesList) {
   return { cal, montant };
 }
 
+function labelAdresse(a) {
+  const num = a.numero || '';
+  const rue = a.rue || '';
+  const cp  = a.codepostal || '';
+  const ville = a.ville || '';
+  if (num && rue) return `${num} ${rue}`;
+  if (rue)        return rue;
+  if (num)        return `Numéro ${num}`;
+  return 'Adresse inconnue';
+}
+
 function renderAdressesBinome(t) {
   const container = document.getElementById('binome-adresses-liste');
   if (!t.adresses || t.adresses.length === 0) {
@@ -2543,13 +2572,13 @@ function renderAdressesBinome(t) {
 
   container.innerHTML = t.adresses.map((a, idx) => `
     <div onclick="ouvrirVenteBinome(${idx})" style="background:var(--blanc);border-radius:14px;padding:16px;margin-bottom:10px;
-      border:1.5px solid ${a.vendu ? 'var(--vert)' : 'var(--gris-clair)'};cursor:pointer;display:flex;justify-content:space-between;align-items:center">
-      <div>
-        <div style="font-size:14px;font-weight:600;color:var(--texte)">${a.numero || ''} ${a.rue || 'Adresse'}</div>
-        <div style="font-size:11px;color:var(--texte-dim);margin-top:2px">${a.ville || ''} ${a.codepostal || ''}</div>
-        ${a.vendu ? `<div style="font-size:11px;color:var(--vert);margin-top:6px;font-weight:600">${modeIcon[a.mode]||''} ${a.calendriers} cal. · ${a.montant}€</div>` : ''}
+      border:1.5px solid ${a.vendu ? '#16A34A' : 'var(--gris-clair)'};cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:600;color:var(--texte);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${labelAdresse(a)}</div>
+        <div style="font-size:11px;color:var(--texte-dim);margin-top:2px">${a.codepostal || ''} ${a.ville || ''}</div>
+        ${a.vendu ? `<div style="font-size:11px;color:#16A34A;margin-top:6px;font-weight:600">${modeIcon[a.mode]||''} ${a.calendriers} cal. · ${a.montant}€</div>` : ''}
       </div>
-      <div style="font-size:24px">${a.vendu ? '✅' : '⬜'}</div>
+      <div style="font-size:28px;margin-left:12px;flex-shrink:0">${a.vendu ? '✅' : '⬜'}</div>
     </div>
   `).join('');
 }
@@ -2560,7 +2589,7 @@ function ouvrirVenteBinome(idx) {
   binomeAdresseEnCours = idx;
   const a = t.adresses[idx];
 
-  document.getElementById('vente-adresse-label').textContent = (a.numero||'') + ' ' + (a.rue||'') + ', ' + (a.ville||'');
+  document.getElementById('vente-adresse-label').textContent = labelAdresse(a) + (a.ville ? ', ' + a.ville : '');
   document.getElementById('vente-calendriers').value = a.vendu ? a.calendriers : 1;
   document.getElementById('vente-montant').value = a.vendu ? a.montant : '';
   binomeModeChoisi = a.vendu ? a.mode : null;
