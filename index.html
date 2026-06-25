@@ -2010,108 +2010,141 @@ async function chargerAdresses() {
     return;
   }
 
-  updateStatusMap('info', '⏳ Détection de la commune...');
+  updateStatusMap('info', '⏳ Lancement des 3 services en parallèle...');
   document.getElementById('btn-charger').disabled = true;
+  adresses = [];
 
   try {
     const bbox = calculerBbox();
     const centreLat = (bbox.minLat + bbox.maxLat) / 2;
     const centreLon = (bbox.minLon + bbox.maxLon) / 2;
+    const poly = pointsPolygone.map(p => `${p.lat} ${p.lng}`).join(' ');
 
-    // Étape 1 : trouver la commune via geo.api.gouv.fr
-    updateStatusMap('info', '⏳ Détection de la commune...');
+    // ── Commune via geo.api.gouv.fr ───────────────────────────────
     const geoResp = await fetch(
       `https://geo.api.gouv.fr/communes?lat=${centreLat}&lon=${centreLon}&fields=code,nom,codesPostaux&format=json`
     );
+    if (!geoResp.ok) throw new Error('geo.api.gouv.fr indisponible (' + geoResp.status + ')');
     const communes = await geoResp.json();
     if (!communes || communes.length === 0) throw new Error('Commune introuvable');
     const commune = communes[0];
     const codeCommune = commune.code;
     const nomCommune = commune.nom;
 
-    updateStatusMap('info', `📍 Commune : ${nomCommune} (${codeCommune}). Chargement des adresses...`);
+    updateStatusMap('info', `📍 ${nomCommune} (${codeCommune}) détectée — lancement des 3 APIs...`);
 
-    // Étape 2 : récupérer les adresses via API BAN avec plusieurs rues
-    // On utilise l'API reverse géocodage sur une grille de points dans le polygone
-    adresses = [];
-    const adressesDejaVues = new Set();
+    // ── Les 3 appels en parallèle ─────────────────────────────────
+    const [resultBAN, resultOverpass, resultNominatim] = await Promise.allSettled([
 
-    // Créer une grille de points dans le bbox et faire des reverse géocodage
-    const nbPoints = 8; // grille 8x8 = 64 points
-    const latStep = (bbox.maxLat - bbox.minLat) / nbPoints;
-    const lonStep = (bbox.maxLon - bbox.minLon) / nbPoints;
+      // 1) BAN
+      fetch(`https://api-adresse.data.gouv.fr/search/?q=a&citycode=${codeCommune}&limit=1000&type=housenumber`)
+        .then(r => { if (!r.ok) throw new Error('BAN HTTP ' + r.status); return r.json(); })
+        .then(data => {
+          const pts = (data.features || []).map(f => ({
+            source: 'BAN',
+            lat: f.geometry.coordinates[1],
+            lon: f.geometry.coordinates[0],
+            numero: f.properties.housenumber || '',
+            rue: f.properties.street || '',
+            ville: f.properties.city || nomCommune,
+            codepostal: f.properties.postcode || ''
+          }));
+          updateStatusMap('info', `⏳ BAN: ${pts.length} adresses brutes pour ${nomCommune}...`);
+          return pts;
+        }),
 
-    // Collecter tous les points de la grille dans le polygone
-    const pointsGrille = [];
-    for (let i = 0; i <= nbPoints; i++) {
-      for (let j = 0; j <= nbPoints; j++) {
-        const lat = bbox.minLat + i * latStep;
-        const lon = bbox.minLon + j * lonStep;
-        if (pointDansPolygone([lat, lon])) {
-          pointsGrille.push({ lat, lon });
-        }
-      }
-    }
+      // 2) Overpass
+      fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: `[out:json][timeout:20];(node["addr:housenumber"](poly:"${poly}");way["addr:housenumber"](poly:"${poly}"););out center;`,
+        signal: AbortSignal.timeout(22000)
+      }).then(r => { if (!r.ok) throw new Error('Overpass HTTP ' + r.status); return r.json(); })
+        .then(data => (data.elements || []).map(el => ({
+          source: 'Overpass',
+          lat: el.lat || el.center?.lat,
+          lon: el.lon || el.center?.lon,
+          numero: el.tags?.['addr:housenumber'] || '',
+          rue: el.tags?.['addr:street'] || '',
+          ville: el.tags?.['addr:city'] || nomCommune,
+          codepostal: el.tags?.['addr:postcode'] || ''
+        })).filter(p => p.lat && p.lon)),
 
-    // Également ajouter les adresses proches du périmètre
-    updateStatusMap('info', `📍 Recherche des adresses dans ${nomCommune}... (${pointsGrille.length} zones analysées)`);
+      // 3) Nominatim
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=200&addressdetails=1&bounded=1&viewbox=${bbox.minLon},${bbox.maxLat},${bbox.maxLon},${bbox.minLat}&q=maison`, {
+        headers: { 'Accept-Language': 'fr', 'User-Agent': 'CalendrierPompiers/1.0' }
+      }).then(r => { if (!r.ok) throw new Error('Nominatim HTTP ' + r.status); return r.json(); })
+        .then(data => data.map(el => ({
+          source: 'Nominatim',
+          lat: parseFloat(el.lat),
+          lon: parseFloat(el.lon),
+          numero: el.address?.house_number || '',
+          rue: el.address?.road || '',
+          ville: el.address?.city || el.address?.town || el.address?.village || nomCommune,
+          codepostal: el.address?.postcode || ''
+        })).filter(p => p.lat && p.lon))
+    ]);
 
-    // Utiliser l'API search avec le nom de commune pour toutes les rues
-    // Récupérer les rues uniques d'abord
-    const ruesResp = await fetch(
-      `https://api-adresse.data.gouv.fr/search/?q=&citycode=${codeCommune}&type=street&limit=100`
-    );
-    const ruesData = await ruesResp.json();
-    const rues = (ruesData.features || []).map(f => f.properties.name || f.properties.street).filter(Boolean);
+    // ── Fusion et déduplication ───────────────────────────────────
+    const dejaVues = new Set();
+    let nbBAN = 0, nbOverpass = 0, nbNominatim = 0;
 
-    updateStatusMap('info', `📍 ${rues.length} rues trouvées pour ${nomCommune}. Chargement des adresses...`);
+    const fusionner = (points, compteur) => {
+      (points || []).forEach(p => {
+        if (!p.lat || !p.lon) return;
+        if (!pointDansPolygone([p.lat, p.lon])) return;
+        const cle = `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`;
+        if (dejaVues.has(cle)) return;
+        dejaVues.add(cle);
+        adresses.push(p);
+        ajouterDrapeauCarte(p);
+        compteur();
+      });
+    };
 
-    // Pour chaque rue, récupérer les numéros
-    for (const rue of rues.slice(0, 50)) { // max 50 rues
-      try {
-        const url = `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(rue)}&citycode=${codeCommune}&limit=200`;
-        const resp = await fetch(url);
-        const data = await resp.json();
-        (data.features || []).forEach(f => {
-          const lon = f.geometry.coordinates[0];
-          const lat = f.geometry.coordinates[1];
-          const cle = `${lat.toFixed(5)},${lon.toFixed(5)}`;
-          if (!adressesDejaVues.has(cle) && pointDansPolygone([lat, lon])) {
-            adressesDejaVues.add(cle);
-            const props = f.properties;
-            adresses.push({
-              numero: props.housenumber || '?',
-              rue: props.street || rue,
-              ville: props.city || nomCommune,
-              codepostal: props.postcode || '',
-              lat, lon
-            });
-L.marker([lat, lon], { icon: L.divIcon({
-              className: '',
-              html: '<div style="position:relative;width:20px;height:28px"><svg viewBox="0 0 20 28" width="20" height="28" xmlns="http://www.w3.org/2000/svg"><line x1="3" y1="0" x2="3" y2="28" stroke="#E8392D" stroke-width="2"/><polygon points="3,2 18,7 3,12" fill="#E8392D"/></svg></div>',
-              iconSize: [20, 28], iconAnchor: [3, 28]
-            })}).addTo(map).bindPopup(
-              `<strong>${props.housenumber || ''} ${props.street || rue}</strong><br>${props.postcode || ''} ${props.city || nomCommune}`
-            );
-          }
-        });
-      } catch(e) { /* ignorer les erreurs par rue */ }
-    }
+    if (resultBAN.status === 'fulfilled')      fusionner(resultBAN.value,      () => nbBAN++);
+    if (resultOverpass.status === 'fulfilled') fusionner(resultOverpass.value, () => nbOverpass++);
+    if (resultNominatim.status === 'fulfilled') fusionner(resultNominatim.value, () => nbNominatim++);
+
+    // Log des sources
+    const sources = [];
+    if (nbBAN > 0)        sources.push(`BAN: ${nbBAN}`);
+    if (nbOverpass > 0)   sources.push(`Overpass: ${nbOverpass}`);
+    if (nbNominatim > 0)  sources.push(`Nominatim: ${nbNominatim}`);
+
+    const echecs = [];
+    if (resultBAN.status === 'rejected')       echecs.push('BAN: ' + (resultBAN.reason?.message || 'erreur'));
+    if (resultOverpass.status === 'rejected')  echecs.push('Overpass: ' + (resultOverpass.reason?.message || 'erreur'));
+    if (resultNominatim.status === 'rejected') echecs.push('Nominatim: ' + (resultNominatim.reason?.message || 'erreur'));
+    if (echecs.length > 0) console.warn('Sources en échec:', echecs);
 
     if (adresses.length === 0) {
-      updateStatusMap('error', `⚠️ Aucune adresse trouvée dans ce secteur pour ${nomCommune}. Essayez d'élargir votre tracé.`);
+      const msgEchec = echecs.length > 0 ? ' Erreurs : ' + echecs.join(', ') : '';
+      updateStatusMap('error', `⚠️ Aucune adresse trouvée dans ce secteur.${msgEchec}`);
     } else {
-      updateStatusMap('success', `✅ ${adresses.length} adresses trouvées dans le secteur !`);
+      const msgSources = sources.length ? ' (' + sources.join(' · ') + ')' : '';
+      const msgEchec = echecs.length ? ' ⚠️ ' + echecs.join(', ') : '';
+      updateStatusMap('success', `✅ ${adresses.length} adresses uniques${msgSources}${msgEchec}`);
     }
+
     document.getElementById('btn-finaliser').disabled = false;
     document.getElementById('btn-charger').disabled = false;
 
   } catch(err) {
     console.error(err);
-    updateStatusMap('error', `❌ Erreur : ${err.message}. Vérifiez votre connexion.`);
+    updateStatusMap('error', '❌ Impossible de charger les adresses : ' + err.message);
     document.getElementById('btn-finaliser').disabled = false;
     document.getElementById('btn-charger').disabled = false;
   }
+}
+
+function ajouterDrapeauCarte(adresse) {
+  L.marker([adresse.lat, adresse.lon], { icon: L.divIcon({
+    className: '',
+    html: '<div style="position:relative;width:20px;height:28px"><svg viewBox="0 0 20 28" width="20" height="28" xmlns="http://www.w3.org/2000/svg"><line x1="3" y1="0" x2="3" y2="28" stroke="#E8392D" stroke-width="2"/><polygon points="3,2 18,7 3,12" fill="#E8392D"/></svg></div>',
+    iconSize: [20, 28], iconAnchor: [3, 28]
+  })}).addTo(map).bindPopup(
+    `<strong>${adresse.numero} ${adresse.rue}</strong><br>${adresse.codepostal} ${adresse.ville}`
+  );
 }
 
 function pointDansPolygone(point) {
